@@ -74,7 +74,7 @@ namespace Cocorra.BLL.Services.RolesService
             var role = await _roleManager.FindByIdAsync(roleId);
             if (role == null) return BadRequest<string>("Role not found");
 
-            if (role.Name!.ToUpper() == "ADMIN") return BadRequest<string>("Cannot delete Admin role");
+            if (role.Name!.ToUpper() == "ADMIN" || role.Name!.ToUpper() == "USER") return BadRequest<string>("Cannot delete Admin role");
 
             var usersInRole = await _userManager.GetUsersInRoleAsync(role.Name!);
             if (usersInRole.Count > 0)

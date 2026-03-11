@@ -74,24 +74,29 @@ namespace Cocorra.BLL.Services.AdminService
                                          u.LastName!.Contains(search));
             }
 
+            var totalCount = await query.CountAsync();
+
             var users = await query
+                .OrderByDescending(u => u.Id) 
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(u => new UserDto
                 {
                     Id = u.Id.ToString(),
                     FullName = $"{u.FirstName} {u.LastName}",
-                    Email = u.Email ?? "", 
+                    Email = u.Email ?? "",
                     Age = u.Age,
-                    MBTI = u.MBTI ?? "N/A", 
+                    MBTI = u.MBTI ?? "N/A",
                     Status = u.Status.ToString(),
                     VoicePath = u.VoiceVerificationPath
                 })
                 .ToListAsync();
 
-            return Success<IEnumerable<UserDto>>(users);
-        }
+            var response = Success<IEnumerable<UserDto>>(users);
+            response.Meta = new { TotalCount = totalCount, CurrentPage = page, PageSize = pageSize };
 
+            return response;
+        }
         public async Task<Response<UserDto>> GetUserByIdAsync(Guid userId)
         {
             var user = await _userManager.FindByIdAsync(userId.ToString());

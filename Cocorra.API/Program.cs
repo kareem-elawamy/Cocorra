@@ -160,7 +160,7 @@ app.UseStaticFiles();
 app.UseCors("CorsPolicy");
 app.UseAuthentication(); // لازم الأول
 app.UseAuthorization();  // لازم بعده
-app.MapHub<ChatHub>("/chatHub");
+app.MapHub<RoomHub>("/roomHub"); 
 app.MapControllers();
 
 app.Run();

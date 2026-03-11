@@ -1,0 +1,337 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Cocorra Mic Tester (Advanced)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.js"></script>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 20px;
+        max-width: 700px;
+        margin: auto;
+      }
+      .form-group {
+        margin-bottom: 10px;
+      }
+      input {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+      }
+      input.small-input {
+        width: 80px;
+        display: inline-block;
+      }
+      button {
+        padding: 8px 12px;
+        cursor: pointer;
+        font-weight: bold;
+        margin-bottom: 5px;
+        border: none;
+      }
+
+      .btn-green {
+        background-color: #4caf50;
+        color: white;
+      }
+      .btn-red {
+        background-color: #f44336;
+        color: white;
+      }
+      .btn-blue {
+        background-color: #2196f3;
+        color: white;
+      }
+      .btn-orange {
+        background-color: #ff9800;
+        color: white;
+      }
+      .btn-purple {
+        background-color: #9c27b0;
+        color: white;
+      }
+
+      /* شكل الزرار وهو مقفول (المايك الغامق) */
+      button:disabled {
+        background-color: #cccccc !important;
+        color: #666666 !important;
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
+      #messagesList {
+        background: #f9f9f9;
+        padding: 10px;
+        border: 1px solid #ccc;
+        height: 300px;
+        overflow-y: auto;
+        list-style-type: none;
+      }
+      li {
+        padding: 6px;
+        border-bottom: 1px solid #eee;
+        font-size: 14px;
+      }
+      .panel {
+        border: 1px solid #ddd;
+        padding: 10px;
+        margin-top: 10px;
+        background: #fff8e1;
+      }
+      .mic-panel {
+        border: 1px solid #ddd;
+        padding: 10px;
+        margin-top: 10px;
+        background: #e3f2fd;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>🎙️ Cocorra Mic Tester (Advanced)</h2>
+
+    <div class="form-group">
+      <input type="text" id="token" placeholder="Paste Token here..." />
+    </div>
+    <div class="form-group">
+      <input type="text" id="roomId" placeholder="Room GUID..." />
+    </div>
+
+    <button class="btn-green" onclick="joinRoom()">1. Join Room</button>
+    <button class="btn-red" onclick="leaveRoom()">2. Leave Room</button>
+    <button class="btn-blue" onclick="raiseHand()">✋ Raise Hand</button>
+
+    <div class="mic-panel">
+      <h4>🎙️ My Mic Controls:</h4>
+      <button
+        id="btnUnmute"
+        class="btn-green"
+        onclick="toggleMic(false)"
+        disabled
+      >
+        Unmute (Speak)
+      </button>
+      <button id="btnMute" class="btn-red" onclick="toggleMic(true)" disabled>
+        Mute
+      </button>
+    </div>
+
+    <div class="panel">
+      <h4>👑 Host Controls:</h4>
+      <input
+        type="text"
+        id="targetUserId"
+        placeholder="Target User ID"
+        style="margin-bottom: 10px"
+      />
+      <br />
+      <button class="btn-green" onclick="approveToStage()">
+        🎤 Approve to Stage
+      </button>
+      <button class="btn-orange" onclick="moveToAudience()">
+        🚷 Move to Audience
+      </button>
+      <button class="btn-red" onclick="kickUser()">🚫 Kick User (Ban)</button>
+
+      <hr />
+      <input
+        type="number"
+        id="extraTimeMinutes"
+        class="small-input"
+        value="1"
+        placeholder="Mins"
+      />
+      <button class="btn-purple" onclick="grantExtraTime()">
+        ⏱️ Grant Time
+      </button>
+    </div>
+
+    <h3>Live Logs:</h3>
+    <ul id="messagesList"></ul>
+
+    <script>
+      var connection;
+      var myUserId = null;
+
+      // دالة سريعة بتفك التوكن وتجيب الـ ID بتاعك عشان نعرف إنت مين في الروم
+      function getMyIdFromToken(token) {
+        try {
+          const payload = JSON.parse(atob(token.split(".")[1]));
+          return (
+            payload.sub ||
+            payload[
+              "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"
+            ]
+          );
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // دالة بتنور وتطفي زراير المايك (تم تحسينها عشان تنور زرار وتطفي التاني)
+      function setMicButtonsState(isOnStage, isMuted = true) {
+        if (!isOnStage) {
+          document.getElementById("btnUnmute").disabled = true;
+          document.getElementById("btnMute").disabled = true;
+        } else {
+          document.getElementById("btnUnmute").disabled = !isMuted;
+          document.getElementById("btnMute").disabled = isMuted;
+        }
+      }
+
+      async function joinRoom() {
+        const token = document.getElementById("token").value;
+        const roomId = document.getElementById("roomId").value;
+        myUserId = getMyIdFromToken(token); // حفظ الـ ID بتاعك
+
+        if (
+          connection &&
+          connection.state === signalR.HubConnectionState.Connected
+        )
+          await connection.stop();
+
+        connection = new signalR.HubConnectionBuilder()
+          .withUrl("https://localhost:7232/roomHub", {
+            accessTokenFactory: () => token,
+          })
+          .build();
+
+        // Listeners
+        connection.on("UserJoined", (data) => {
+          log(`🟢 ${data.name} joined!`, "green");
+          // لو اللي دخل ده هو إنت، شوف حالتك إيه (ستيدج ولا جمهور) واضبط المايك
+          if (data.userId.toLowerCase() === myUserId.toLowerCase()) {
+            setMicButtonsState(data.isOnStage);
+          }
+        });
+
+        connection.on("HandRaised", (data) =>
+          log(`✋ ${data.name} wants to speak! (ID: ${data.userId})`, "blue"),
+        );
+
+        connection.on("StageUpdated", (data) => {
+          log(
+            data.isOnStage
+              ? `🎤 ${data.name} is ON STAGE!`
+              : `🚷 ${data.name} moved to AUDIENCE.`,
+            data.isOnStage ? "green" : "orange",
+          );
+          // لو الكوتش طلعك أو نزلك، المايك ينور أو يطفي أوتوماتيك (افتراضياً المايك بيبقى مقفول)
+          if (data.userId.toLowerCase() === myUserId.toLowerCase()) {
+            setMicButtonsState(data.isOnStage, true);
+          }
+        });
+
+        connection.on("MicStatusChanged", (data) => {
+          log(
+            data.isMuted
+              ? `🔇 ${data.name} MUTED their mic.`
+              : `🔊 ${data.name} UNMUTED!`,
+            data.isMuted ? "red" : "green",
+          );
+          // عكس حالة زراير المايك عندي لو أنا اللي غيرته
+          if (data.userId.toLowerCase() === myUserId.toLowerCase()) {
+            setMicButtonsState(true, data.isMuted);
+          }
+        });
+
+        connection.on("ExtraTimeGranted", (data) =>
+          log(
+            `⏱️ +${data.addedMinutes} mins granted to ${data.name}!`,
+            "purple",
+          ),
+        );
+
+        // 👇 إضافة استقبال خبر الطرد النهائي 👇
+        connection.on("UserKicked", async (data) => {
+          log(`🚫 ${data.name} was KICKED from the room!`, "red");
+
+          // لو أنا اللي انطردت، هقفل الاتصال بالعافية وأطلع بره
+          if (data.userId.toLowerCase() === myUserId.toLowerCase()) {
+            alert("You have been kicked from the room by the host!");
+            await connection.stop(); // قفلنا الـ Socket
+            setMicButtonsState(false); // قفلنا المايك
+            log("🔌 Disconnected (You were kicked).", "gray");
+          }
+        });
+
+        try {
+          await connection.start();
+          log("✅ Connected!", "black");
+          await connection.invoke("JoinRoom", roomId);
+        } catch (err) {
+          log("❌ Error: " + err.toString(), "red");
+        }
+      }
+
+      async function leaveRoom() {
+        await connection.invoke(
+          "LeaveRoom",
+          document.getElementById("roomId").value,
+        );
+        await connection.stop();
+        log("🔌 Disconnected.", "gray");
+        setMicButtonsState(false);
+      }
+
+      async function raiseHand() {
+        await connection.invoke(
+          "RaiseHand",
+          document.getElementById("roomId").value,
+        );
+      }
+
+      async function approveToStage() {
+        await connection.invoke(
+          "ApproveToStage",
+          document.getElementById("roomId").value,
+          document.getElementById("targetUserId").value,
+        );
+      }
+
+      async function moveToAudience() {
+        await connection.invoke(
+          "MoveToAudience",
+          document.getElementById("roomId").value,
+          document.getElementById("targetUserId").value,
+        );
+      }
+
+      // 👇 الدالة الجديدة بتاعة زرار الطرد 👇
+      async function kickUser() {
+        await connection.invoke(
+          "KickUser",
+          document.getElementById("roomId").value,
+          document.getElementById("targetUserId").value,
+        );
+      }
+
+      async function toggleMic(isMuted) {
+        await connection.invoke(
+          "ToggleMic",
+          document.getElementById("roomId").value,
+          isMuted,
+        );
+      }
+
+      async function grantExtraTime() {
+        const minutes =
+          parseInt(document.getElementById("extraTimeMinutes").value) || 1;
+        await connection.invoke(
+          "GrantExtraTime",
+          document.getElementById("roomId").value,
+          document.getElementById("targetUserId").value,
+          minutes,
+        );
+      }
+
+      function log(msg, color) {
+        const li = document.createElement("li");
+        li.textContent = msg;
+        li.style.color = color;
+        const ul = document.getElementById("messagesList");
+        ul.appendChild(li);
+        ul.scrollTop = ul.scrollHeight;
+      }
+    </script>
+  </body>
+</html>

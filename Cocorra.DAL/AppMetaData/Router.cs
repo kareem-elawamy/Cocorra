@@ -40,7 +40,10 @@
         public static class RoomRouting
         {
             public const string Prefix = Rule + "Room";
-            public const string Create = Prefix + "/Create";               // POST
+            public const string Create = Prefix + "/Create";               
+            public const string Join = Prefix + "/Join";               
+            public const string Approve = Prefix + "/Approve";
+            public const string State = Prefix + "/{roomId}/State";
         }
     }
 }
