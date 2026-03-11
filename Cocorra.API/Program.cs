@@ -2,12 +2,15 @@ using Cocorra.API.Hubs;
 using Cocorra.BLL.Services.AdminService;
 using Cocorra.BLL.Services.Auth;
 using Cocorra.BLL.Services.AuthServices;
+using Cocorra.BLL.Services.FriendService;
 using Cocorra.BLL.Services.RolesService;
 using Cocorra.BLL.Services.RoomService;
 using Cocorra.BLL.Services.Upload;
 using Cocorra.DAL.Data;
 using Cocorra.DAL.Models;
+using Cocorra.DAL.Repository.FriendRepository;
 using Cocorra.DAL.Repository.GenericRepository;
+using Cocorra.DAL.Repository.NotificationRepository;
 using Cocorra.DAL.Repository.RoomRepository;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -76,6 +79,9 @@ builder.Services.AddScoped<IRoomService, RoomService>();
 builder.Services.AddScoped<IAuthServices, AuthServices>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IRolesService, RolesService>();
+builder.Services.AddScoped<IFriendRepository, FriendRepository>();
+builder.Services.AddScoped<IFriendService, FriendService>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 builder.Services.AddScoped(typeof(IGenericRepositoryAsync<>), typeof(GenericRepositoryAsync<>));
 #endregion
 

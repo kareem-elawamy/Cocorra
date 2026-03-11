@@ -17,5 +17,14 @@ namespace Cocorra.DAL.Repository.RoomRepository
         Task AddParticipantAsync(RoomParticipant participant);
         Task UpdateParticipantAsync(RoomParticipant participant);
         Task RemoveParticipantAsync(RoomParticipant participant);
+        Task<List<RoomReminder>> GetRemindersByRoomIdAsync(Guid roomId);
+        Task RemoveRemindersAsync(IEnumerable<RoomReminder> reminders);
+        Task AddNotificationsAsync(IEnumerable<Notification> notifications);
+
+        Task<List<Room>> GetActiveRoomsAsync(); // لنجلب الغرف اللايف والمجدولة بس
+        Task<RoomReminder?> GetRoomReminderAsync(Guid roomId, Guid userId);
+        Task<int> GetRoomRemindersCountAsync(Guid roomId);
+        Task AddRoomReminderAsync(RoomReminder reminder);
+        Task RemoveRoomReminderAsync(RoomReminder reminder);
     }
 }

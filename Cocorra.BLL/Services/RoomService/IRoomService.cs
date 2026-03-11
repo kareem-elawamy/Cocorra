@@ -9,4 +9,7 @@ public interface IRoomService
     Task<Response<bool>> JoinRoomAsync(Guid roomId, Guid userId);
     Task<Response<bool>> ApproveUserAsync(Guid roomId, Guid targetUserId, Guid hostId);
     Task<Response<RoomStateDto>> GetRoomStateAsync(Guid roomId, Guid currentUserId);
+    Task<Response<IEnumerable<RoomSummaryDto>>> GetRoomsFeedAsync(Guid currentUserId);
+    Task<Response<string>> ToggleReminderAsync(Guid roomId, Guid userId);
+    Task<Response<string>> StartScheduledRoomAsync(Guid roomId, Guid hostId);
 }

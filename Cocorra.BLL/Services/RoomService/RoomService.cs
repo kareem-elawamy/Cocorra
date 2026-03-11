@@ -1,5 +1,6 @@
 ﻿using Cocorra.DAL;
 using Cocorra.DAL.DTOS.RoomDto;
+using Cocorra.DAL.Enums;
 using Cocorra.DAL.Models;
 using Cocorra.DAL.Repository.RoomRepository;
 using Core.Base;
@@ -19,6 +20,12 @@ public class RoomService : ResponseHandler, IRoomService
     {
         try
         {
+            var status = RoomStatus.Live;
+            if (dto.ScheduledStartDate.HasValue && dto.ScheduledStartDate > DateTime.UtcNow)
+            {
+                status = RoomStatus.Scheduled;
+            }
+
             var room = new Room
             {
                 RoomTitle = dto.RoomTitle,
@@ -29,36 +36,30 @@ public class RoomService : ResponseHandler, IRoomService
                 IsPrivate = dto.IsPrivate,
                 SelectionMode = dto.SelectionMode,
                 HostId = hostId,
-                StartDate = DateTime.UtcNow,
-                status = RoomStatus.Live, 
+                StartDate = dto.ScheduledStartDate ?? DateTime.UtcNow,
+                status = status, // الحالة الجديدة
                 CreatedAt = DateTime.UtcNow
             };
 
-            // 2. إضافة الـ Host كأول مشارك في الروم (Owner Logic)
-            // الـ Host لازم يدخل الروم أوتوماتيك ويكون على الستيدج
-            var hostParticipant = new RoomParticipant
+            if (status == RoomStatus.Live)
             {
-                UserId = hostId,
-                Status = ParticipantStatus.Active,
-                IsOnStage = true,   // طبعاً صاحب الروم على الستيدج
-                IsMuted = false,    // والمايك مفتوح عشان يرحب بالناس
-                JoinedAt = DateTime.UtcNow,
-                // العلاقة هتتربط لما نضيفها للروم
-            };
+                var hostParticipant = new RoomParticipant
+                {
+                    UserId = hostId,
+                    Status = ParticipantStatus.Active,
+                    IsOnStage = true,
+                    IsMuted = false,
+                    JoinedAt = DateTime.UtcNow,
+                    LastUnmutedAt = DateTime.UtcNow
+                };
+                room.Participants.Add(hostParticipant);
+            }
 
-            // بنضيف المشارك لقائمة مشاركين الروم
-            room.Participants.Add(hostParticipant);
-
-            // 3. الحفظ في الداتابيز
-            // الـ AddAsync هنا ذكية، هتحفظ الروم وهتحفظ المشارك اللي جواها في نفس الوقت (Transaction)
             await _roomRepo.AddAsync(room);
-
-            // 4. إرجاع الـ ID عشان الفرونت يوجهه لصفحة الروم
             return Success(room.Id);
         }
         catch (Exception ex)
         {
-            // ممكن تعمل Logging هنا
             return BadRequest<Guid>($"Failed to create room: {ex.Message}");
         }
     }
@@ -66,6 +67,15 @@ public class RoomService : ResponseHandler, IRoomService
     {
         var room = await _roomRepo.GetByIdAsync(roomId);
         if (room == null) return NotFound<bool>("Room not found.");
+
+        if (room.status == RoomStatus.Scheduled)
+        {
+            return BadRequest<bool>("This room has not started yet. You can set a reminder instead.");
+        }
+        if (room.status == RoomStatus.Ended || room.status == RoomStatus.Cancelled)
+        {
+            return BadRequest<bool>("This room is no longer available.");
+        }
 
         // 👇 1. التأكد من السعة (Capacity) للناس اللي "جوه" فعلاً
         var allParticipants = await _roomRepo.GetRoomParticipantsAsync(roomId);
@@ -178,5 +188,136 @@ public class RoomService : ResponseHandler, IRoomService
         };
 
         return Success(roomState);
+    }
+
+    public async Task<Response<IEnumerable<RoomSummaryDto>>> GetRoomsFeedAsync(Guid currentUserId)
+    {
+        // 1. نجيب الغرف من الريبو مباشرة
+        var activeRooms = await _roomRepo.GetActiveRoomsAsync();
+        var resultList = new List<RoomSummaryDto>();
+
+        foreach (var room in activeRooms)
+        {
+            var dto = new RoomSummaryDto
+            {
+                Id = room.Id,
+                RoomTitle = room.RoomTitle,
+                Description = room.Description,
+                Status = room.status,
+                ScheduledStartDate = room.StartDate,
+                IsReminderSetByMe = false,
+                ListenersCount = 0
+            };
+
+            if (room.status == RoomStatus.Live)
+            {
+                var participants = await _roomRepo.GetRoomParticipantsAsync(room.Id);
+                dto.ListenersCount = participants.Count(p => p.Status == ParticipantStatus.Active);
+            }
+            else if (room.status == RoomStatus.Scheduled)
+            {
+                // 👇 نستخدم الريبو بدل الـ DbContext 👇
+                var reminder = await _roomRepo.GetRoomReminderAsync(room.Id, currentUserId);
+                dto.IsReminderSetByMe = reminder != null;
+
+                dto.ListenersCount = await _roomRepo.GetRoomRemindersCountAsync(room.Id);
+            }
+
+            resultList.Add(dto);
+        }
+
+        var sortedList = resultList
+            .OrderBy(r => r.Status == RoomStatus.Live ? 0 : 1)
+            .ThenBy(r => r.ScheduledStartDate)
+            .ToList();
+
+        return Success<IEnumerable<RoomSummaryDto>>(sortedList);
+    }
+
+    public async Task<Response<string>> StartScheduledRoomAsync(Guid roomId, Guid hostId)
+    {
+        var room = await _roomRepo.GetByIdAsync(roomId);
+        if (room == null) return NotFound<string>("Room not found.");
+
+        // 1. حماية: نتأكد إن الكوتش هو صاحب الروم وإنها لسه مابدأتش
+        if (room.HostId != hostId)
+            return BadRequest<string>("Only the host can start this room.");
+
+        if (room.status == RoomStatus.Live)
+            return BadRequest<string>("This room is already live.");
+
+        if (room.status == RoomStatus.Ended || room.status == RoomStatus.Cancelled)
+            return BadRequest<string>("This room is no longer available.");
+
+        // 2. تحويل الحالة لـ Live
+        room.status = RoomStatus.Live;
+        await _roomRepo.UpdateAsync(room); // ده بيعمل Update للروم
+
+        // 3. إضافة الكوتش كأول متحدث على المسرح (زي ما عملنا في الـ Create)
+        var hostParticipant = new RoomParticipant
+        {
+            RoomId = roomId,
+            UserId = hostId,
+            Status = ParticipantStatus.Active,
+            IsOnStage = true,
+            IsMuted = false,
+            JoinedAt = DateTime.UtcNow,
+            LastUnmutedAt = DateTime.UtcNow
+        };
+        await _roomRepo.AddParticipantAsync(hostParticipant);
+
+        // 4. 🔔 جلب المشتركين وإرسال الإشعارات
+        var reminders = await _roomRepo.GetRemindersByRoomIdAsync(roomId);
+        if (reminders.Any())
+        {
+            var notifications = reminders.Select(r => new Notification
+            {
+                UserId = r.UserId,
+                Title = "Room Starting Now! 🎙️",
+                Message = $"The room '{room.RoomTitle}' has just started. Join now!",
+                Type = NotificationType.RoomReminder,
+                ReferenceId = room.Id,
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow
+            }).ToList();
+
+            await _roomRepo.AddNotificationsAsync(notifications);
+
+            // نقدر نمسح الـ Reminders عشان دورهم انتهى (اختياري بس بينظف الداتابيز)
+            await _roomRepo.RemoveRemindersAsync(reminders);
+        }
+
+        // نحفظ كل التغييرات دي خبطة واحدة
+        await _roomRepo.SaveChangesAsync();
+
+        return Success("Room is now live and notifications have been sent!");
+    }
+    public async Task<Response<string>> ToggleReminderAsync(Guid roomId, Guid userId)
+    {
+        var room = await _roomRepo.GetByIdAsync(roomId);
+        if (room == null) return NotFound<string>("Room not found.");
+
+        if (room.status != RoomStatus.Scheduled)
+            return BadRequest<string>("You can only set reminders for scheduled rooms.");
+
+        // 👇 نستخدم الريبو بدل الـ DbContext 👇
+        var existingReminder = await _roomRepo.GetRoomReminderAsync(roomId, userId);
+
+        if (existingReminder != null)
+        {
+            await _roomRepo.RemoveRoomReminderAsync(existingReminder);
+            return Success("Reminder removed.");
+        }
+        else
+        {
+            var reminder = new RoomReminder
+            {
+                RoomId = roomId,
+                UserId = userId,
+                CreatedAt = DateTime.UtcNow
+            };
+            await _roomRepo.AddRoomReminderAsync(reminder);
+            return Success("Reminder set successfully.");
+        }
     }
 }

@@ -31,6 +31,50 @@ namespace Cocorra.DAL.Repository.RoomRepository
                                  .ThenBy(p => p.JoinedAt)
                                  .ToListAsync();
         }
+        public async Task<List<Room>> GetActiveRoomsAsync()
+        {
+            return await _dbContext.Rooms
+                .Where(r => r.status == RoomStatus.Live || r.status == RoomStatus.Scheduled)
+                .ToListAsync();
+        }
+
+        public async Task<RoomReminder?> GetRoomReminderAsync(Guid roomId, Guid userId)
+        {
+            return await _dbContext.RoomReminders
+                .FirstOrDefaultAsync(rr => rr.RoomId == roomId && rr.UserId == userId);
+        }
+
+        public async Task<int> GetRoomRemindersCountAsync(Guid roomId)
+        {
+            return await _dbContext.RoomReminders
+                .CountAsync(rr => rr.RoomId == roomId);
+        }
+        public async Task<List<RoomReminder>> GetRemindersByRoomIdAsync(Guid roomId)
+        {
+            return await _dbContext.RoomReminders.Where(rr => rr.RoomId == roomId).ToListAsync();
+        }
+
+        public async Task RemoveRemindersAsync(IEnumerable<RoomReminder> reminders)
+        {
+            _dbContext.RoomReminders.RemoveRange(reminders);
+            await Task.CompletedTask; // بنمسحهم بس عشان خلاص الروم بدأت
+        }
+
+        public async Task AddNotificationsAsync(IEnumerable<Notification> notifications)
+        {
+            await _dbContext.Notifications.AddRangeAsync(notifications);
+        }
+        public async Task AddRoomReminderAsync(RoomReminder reminder)
+        {
+            await _dbContext.RoomReminders.AddAsync(reminder);
+            await _dbContext.SaveChangesAsync(); // ممكن تخلي الـ Save في الـ Service لو حابب
+        }
+
+        public async Task RemoveRoomReminderAsync(RoomReminder reminder)
+        {
+            _dbContext.RoomReminders.Remove(reminder);
+            await _dbContext.SaveChangesAsync();
+        }
 
         public async Task<List<RoomParticipant>> GetStageSpeakersAsync(Guid roomId)
         {

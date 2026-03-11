@@ -15,7 +15,9 @@ namespace Cocorra.DAL.Data
         public DbSet<RoomParticipant> RoomParticipants { get; set; }
         public DbSet<RoomTopicRequest> RoomTopicRequests { get; set; }
         public DbSet<TopicVote> TopicVotes { get; set; }
-
+        public DbSet<Notification> Notifications { get; set; }
+        public DbSet<FriendRequest> FriendRequests { get; set; }
+        public DbSet<RoomReminder> RoomReminders { get; set; }
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
@@ -88,6 +90,23 @@ namespace Cocorra.DAL.Data
                 .WithMany()
                 .HasForeignKey(r => r.TargetCoachId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+
+            builder.Entity<RoomReminder>()
+        .HasKey(rr => new { rr.UserId, rr.RoomId });
+
+            // 2. تظبيط علاقات جدول الصداقة (عشان EF Core ميتلخبطش بين الـ Sender والـ Receiver)
+            builder.Entity<FriendRequest>()
+                .HasOne(fr => fr.Sender)
+                .WithMany()
+                .HasForeignKey(fr => fr.SenderId)
+                .OnDelete(DeleteBehavior.Restrict); // يفضل Restrict عشان لو يوزر اتمسح ميطيرش اليوزر التاني
+
+            builder.Entity<FriendRequest>()
+                .HasOne(fr => fr.Receiver)
+                .WithMany()
+                .HasForeignKey(fr => fr.ReceiverId)
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 }

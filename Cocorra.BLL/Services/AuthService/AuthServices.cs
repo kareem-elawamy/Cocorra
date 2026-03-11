@@ -140,7 +140,6 @@ namespace Cocorra.BLL.Services.AuthServices
             return Success(authModel);
         }
 
-        // 3. الدالة الجديدة: إضافة/تعديل الـ MBTI بعد ما اليوزر يتقبل ويدخل
         public async Task<Response<string>> SubmitMbtiAsync(Guid userId, SubmitMbtiDto dto)
         {
             var user = await _userManager.FindByIdAsync(userId.ToString());

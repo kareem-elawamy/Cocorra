@@ -36,6 +36,10 @@ namespace Cocorra.API.Hubs
             if (!Guid.TryParse(roomId, out Guid roomGuid))
                 throw new HubException("Invalid Room ID.");
 
+            var room = await _roomRepo.GetByIdAsync(roomGuid);
+            if (room == null || room.status != RoomStatus.Live)
+                throw new HubException("Room is not live yet or has ended.");
+
             var participant = await _roomRepo.GetParticipantAsync(roomGuid, userId);
 
             if (participant == null)
@@ -224,6 +228,7 @@ namespace Cocorra.API.Hubs
             var room = await _roomRepo.GetByIdAsync(roomGuid);
             if (room == null) return;
 
+
             var participant = await _roomRepo.GetParticipantAsync(roomGuid, userId);
             if (participant == null || !participant.IsOnStage) return;
 
@@ -232,6 +237,10 @@ namespace Cocorra.API.Hubs
             var remainingSeconds = totalAllowedSeconds - participant.TotalSpokenSeconds;
 
             // 2. الحماية (لو بيحاول يفتح المايك ووقته خلصان)
+            if (muteStatus == false && remainingSeconds <= 0 && userId != room.HostId)
+            {
+                throw new HubException("Your time is up! The host needs to grant you more time.");
+            }
             if (muteStatus == false && remainingSeconds <= 0 && userId != room.HostId)
             {
                 throw new HubException("Your time is up! The host needs to grant you more time.");

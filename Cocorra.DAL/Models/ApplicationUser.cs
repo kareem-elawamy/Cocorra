@@ -21,10 +21,10 @@ namespace Cocorra.DAL.Models
         public UserStatus Status { get; set; } = UserStatus.Pending;
 
         // علاقة بالرومات اللي دخلها
-        public virtual ICollection<RoomParticipant> RoomParticipations { get; set; }
+        public virtual ICollection<RoomParticipant> RoomParticipations { get; set; } = new List<RoomParticipant>();
 
         // علاقة بالرومات اللي هو الـ Host بتاعها
-        public virtual ICollection<Room> OwnedRooms { get; set; }
+        public virtual ICollection<Room> OwnedRooms { get; set; }= new List<Room>();
         public DateTime CreateAt { get; set; }
     }
 }
