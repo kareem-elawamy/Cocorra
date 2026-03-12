@@ -17,5 +17,6 @@ namespace Cocorra.DAL.DTOS.RoomDto
 
         // هل اليوزر الحالي عامل Reminder للروم دي ولا لأ؟ (عشان شكل الزرار)
         public bool IsReminderSetByMe { get; set; }
+        public required string HostName { get; set; } = string.Empty;
     }
 }

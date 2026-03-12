@@ -4,6 +4,7 @@ using Cocorra.DAL.Enums;
 using Cocorra.DAL.Models;
 using Cocorra.DAL.Repository.RoomRepository;
 using Core.Base;
+using Microsoft.Extensions.Hosting;
 
 namespace Cocorra.BLL.Services.RoomService;
 
@@ -206,7 +207,8 @@ public class RoomService : ResponseHandler, IRoomService
                 Status = room.status,
                 ScheduledStartDate = room.StartDate,
                 IsReminderSetByMe = false,
-                ListenersCount = 0
+                ListenersCount = 0,
+                HostName = room.Host!.FirstName + " " + room.Host.LastName,
             };
 
             if (room.status == RoomStatus.Live)

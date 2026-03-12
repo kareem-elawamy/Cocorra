@@ -10,5 +10,6 @@ namespace Cocorra.DAL.Repository.FriendRepository
     {
         Task<FriendRequest?> GetFriendshipRelationAsync(Guid userId1, Guid userId2);
         Task<FriendRequest?> GetPendingRequestAsync(Guid senderId, Guid receiverId);
+        Task<List<ApplicationUser>> GetAcceptedFriendsAsync(Guid userId);
     }
 }

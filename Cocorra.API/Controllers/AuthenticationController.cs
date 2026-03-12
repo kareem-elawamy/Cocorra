@@ -42,7 +42,6 @@ namespace Cocorra.API.Controllers
             return Ok(result);
         }
 
-        [Authorize]
         [HttpPost("submit-mbti")] 
         public async Task<IActionResult> SubmitMbti([FromBody] SubmitMbtiDto dto)
         {

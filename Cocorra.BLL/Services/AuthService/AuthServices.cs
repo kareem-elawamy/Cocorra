@@ -98,7 +98,7 @@ namespace Cocorra.BLL.Services.AuthServices
                 {
                     await transaction.RollbackAsync();
                     DeleteFile(voicePathToDelete);
-                    return BadRequest<string>("Something went wrong: " + ex.Message);
+                    return BadRequest<string>("An unexpected error occurred during registration. Please try again later.");
                 }
             });
         }

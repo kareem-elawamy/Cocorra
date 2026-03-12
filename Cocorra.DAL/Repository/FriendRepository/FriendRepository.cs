@@ -28,4 +28,14 @@ public class FriendRepository : GenericRepositoryAsync<FriendRequest>, IFriendRe
         return await _dbContext.FriendRequests
             .FirstOrDefaultAsync(f => f.SenderId == senderId && f.ReceiverId == receiverId && f.Status == FriendRequestStatus.Pending);
     }
+    public async Task<List<ApplicationUser>> GetAcceptedFriendsAsync(Guid userId)
+    {
+        var friendships = await _dbContext.FriendRequests
+            .Include(f => f.Sender)
+            .Include(f => f.Receiver)
+            .Where(f => (f.SenderId == userId || f.ReceiverId == userId) && f.Status == FriendRequestStatus.Accepted)
+            .ToListAsync();
+
+        return friendships.Select(f => f.SenderId == userId ? f.Receiver! : f.Sender!).ToList();
+    }
 }

@@ -17,13 +17,11 @@ namespace Cocorra.DAL.Models
         public string? VoiceVerificationPath { get; set; }
         public string? MBTI { get; set; }
 
-        // هل الحساب متفعل ولا لسه
         public UserStatus Status { get; set; } = UserStatus.Pending;
 
-        // علاقة بالرومات اللي دخلها
         public virtual ICollection<RoomParticipant> RoomParticipations { get; set; } = new List<RoomParticipant>();
 
-        // علاقة بالرومات اللي هو الـ Host بتاعها
+        public string? FcmToken { get; set; }
         public virtual ICollection<Room> OwnedRooms { get; set; }= new List<Room>();
         public DateTime CreateAt { get; set; }
     }
