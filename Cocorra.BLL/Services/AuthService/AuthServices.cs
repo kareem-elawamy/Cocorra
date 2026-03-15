@@ -1,5 +1,6 @@
 using Cocorra.BLL.DTOS.Auth;
 using Cocorra.BLL.Services.Auth;
+using Cocorra.BLL.Services.Email;
 using Cocorra.BLL.Services.Upload;
 using Cocorra.DAL.Data;
 using Cocorra.DAL.DTOS.Auth;
@@ -27,18 +28,24 @@ namespace Cocorra.BLL.Services.AuthServices
         private readonly IConfiguration _configuration;
         private readonly IUploadVoice _uploadVoice;
         private readonly AppDbContext _context;
+        private readonly IEmailService _emailService;
+        private readonly IUploadImage _uploadImage;
 
         public AuthServices(
             UserManager<ApplicationUser> userManager,
             RoleManager<IdentityRole<Guid>> roleManager,
             IConfiguration configuration,
             IUploadVoice uploadVoice,
+            IEmailService emailService,
+            IUploadImage uploadImage,
             AppDbContext context)
         {
+            _uploadImage = uploadImage;
             _context = context;
             _uploadVoice = uploadVoice;
             _userManager = userManager;
             _roleManager = roleManager;
+            _emailService = emailService;
             _configuration = configuration;
         }
 
@@ -49,6 +56,7 @@ namespace Cocorra.BLL.Services.AuthServices
             {
                 using var transaction = await _context.Database.BeginTransactionAsync();
                 string? voicePathToDelete = null;
+                string? profilePicturePathToDelete = null;
 
                 try
                 {
@@ -59,9 +67,14 @@ namespace Cocorra.BLL.Services.AuthServices
                     var voicePath = await _uploadVoice.SaveVoice(dto.VoiceVerification!);
                     if (voicePath.StartsWith("Error"))
                         return BadRequest<string>(voicePath);
-
                     voicePathToDelete = voicePath;
-
+                    var profilePicturePath = await _uploadImage.SaveImageAsync(dto.ProfilePicture!);
+                    if (profilePicturePath.StartsWith("Error"))
+                    {
+                        DeleteFile(voicePathToDelete);
+                        return BadRequest<string>(profilePicturePath);
+                    }
+                    profilePicturePathToDelete = profilePicturePath;
                     var user = new ApplicationUser
                     {
                         UserName = dto.Email,
@@ -69,8 +82,11 @@ namespace Cocorra.BLL.Services.AuthServices
                         FirstName = dto.FirstName!,
                         LastName = dto.LastName!,
                         Age = dto.Age,
-                        Status = UserStatus.Pending, 
-                        VoiceVerificationPath = voicePath
+                        Status = UserStatus.Pending,
+                        VoiceVerificationPath = voicePath,
+                        EmailConfirmed = false,
+                        CreateAt = DateTime.UtcNow,
+                        ProfilePicturePath = profilePicturePath
                     };
 
                     var result = await _userManager.CreateAsync(user, dto.Password!);
@@ -87,16 +103,24 @@ namespace Cocorra.BLL.Services.AuthServices
                     var roleResult = await _userManager.AddToRoleAsync(user, "User");
                     if (!roleResult.Succeeded)
                         throw new Exception("Failed to assign role");
-
+                    var otpCode = await _userManager.GenerateTwoFactorTokenAsync(
+                        user,
+                        TokenOptions.DefaultEmailProvider
+                    );
+                    var baseUrl = _configuration["AppSettings:BaseUrl"];
+                    var fullImagePath = $"{baseUrl}/System/388f7e03b835e6ca1f7c156816047a360bf18efe.png"; 
+                    var emailBody = GetOtpHtmlTemplate(user.FirstName!, email: user.Email!, otpCode, fullImagePath);
+                    await _emailService.SendEmailAsync(user.Email!, "Registration Received", emailBody);
                     await transaction.CommitAsync();
 
-                    return Created("Registration successful. Your account is pending verification. We usually respond within 24 hours.");
+                    return Created("Registration successful! Check Your Email .");
                 }
                 catch (Exception ex)
                 {
                     await transaction.RollbackAsync();
                     DeleteFile(voicePathToDelete);
-                    return BadRequest<string>("An unexpected error occurred during registration. Please try again later.");
+                    DeleteFile(profilePicturePathToDelete);
+                    return BadRequest<string>($"Error: {ex.Message} -- Internal: {ex.InnerException?.Message}");
                 }
             });
         }
@@ -108,7 +132,10 @@ namespace Cocorra.BLL.Services.AuthServices
             {
                 return BadRequest<AuthModel>("Invalid Email or Password");
             }
-
+            if (!user.EmailConfirmed)
+            {
+                return BadRequest<AuthModel>("Please confirm your email before logging in.");
+            }
             switch (user.Status)
             {
                 case UserStatus.Pending:
@@ -159,7 +186,7 @@ namespace Cocorra.BLL.Services.AuthServices
 
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
 
-        
+
 
             return Success("If your email is registered, you will receive a password reset link shortly.");
         }
@@ -185,8 +212,10 @@ namespace Cocorra.BLL.Services.AuthServices
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email!),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())
-            };
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.Name, user.UserName!),
+                // profile Picture URL claim
+                new Claim("profilePicture", string.IsNullOrEmpty(user.ProfilePicturePath) ? "" : $"{_configuration["AppSettings:BaseUrl"]}/{user.ProfilePicturePath.Replace("\\", "/")}")         };
 
             foreach (var role in userRoles) claims.Add(new Claim(ClaimTypes.Role, role));
 
@@ -212,6 +241,68 @@ namespace Cocorra.BLL.Services.AuthServices
             await _userManager.UpdateAsync(user);
 
             return Success("FCM Token updated successfully.");
+        }
+        private string GetOtpHtmlTemplate(string userName, string email, string otpCode, string baseUrl)
+        {
+            // استخدمنا $$""" لكي نتجاهل أقواس الـ CSS العادية { }
+            // ونستخدم المتغيرات بين قوسين مزدوجين {{ }}
+            return $$"""
+    <!DOCTYPE html>
+    <html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Email Verification</title>
+        <style>
+            body { margin: 0; padding: 0; background-color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+            .container { width: 100%; max-width: 400px; text-align: center; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); }
+            .header { background-color: #4f5b49; padding: 30px 0; }
+            .logo-container { width: 100px; height: 100px; margin: 0 auto; border: 2px solid white; border-radius: 8px; overflow: hidden; background-color: #c5d1ba; }
+            .logo-container img { width: 100%; height: 100%; object-fit: cover; }
+            .content { background-color: #a0b19d; padding: 25px 20px 40px; color: white; }
+            .greeting { margin: 0 0 15px 0; font-size: 26px; font-weight: bold; }
+            .email-box { background-color: white; color: #333; padding: 12px 20px; border-radius: 30px; display: inline-block; font-weight: bold; font-size: 18px; margin-bottom: 25px; width: 85%; box-sizing: border-box; }
+            .instruction { margin: 0 0 25px 0; font-size: 16px; line-height: 1.4; font-weight: 600; }
+            .code-box { background-color: white; color: black; font-size: 32px; font-weight: 900; letter-spacing: 8px; padding: 20px; border-radius: 15px; margin-bottom: 25px; display: inline-block; width: 85%; box-sizing: border-box; }
+            .footer { margin: 0; font-size: 14px; font-weight: bold; }
+        </style>
+    </head>
+
+    <body>
+        <div class="container">
+            <div class="header">
+                <div class="logo-container">
+                    <img src="{{baseUrl}}" alt="Cocorra">
+                </div>
+            </div>
+
+            <div class="content">
+                <h1 class="greeting">Hello {{userName}}</h1>
+
+                <div class="email-box">
+                    {{email}}
+                </div>
+
+                <p class="instruction">
+                    The current code is for<br>
+                    the verification process to complete<br>
+                    your account registration.
+                </p>
+
+                <div class="code-box">
+                    {{otpCode}}
+                </div>
+
+                <p class="footer">
+                    This code is valid for 10 minutes.
+                </p>
+            </div>
+        </div>
+    </body>
+
+    </html>
+    """;
         }
     }
 }

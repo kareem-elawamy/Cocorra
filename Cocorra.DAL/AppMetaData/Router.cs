@@ -11,6 +11,11 @@
             public const string Prefix = Rule + "Authentication";
             public const string Register = Prefix + "/Register";
             public const string Login = Prefix + "/Login";
+            public const string SubmitMbti = Prefix + "/SubmitMbti";
+            public const string ForgotPassword = Prefix + "/ForgotPassword";
+            public const string UpdateFcmToken = Prefix + "/UpdateFcmToken";
+            public const string ConfirmEmail = Prefix + "/ConfirmEmail"; // GET
+            public const string ResendOtp = Prefix + "/ResendOtp"; // POST
         }
 
         public static class AdminRouting
@@ -40,8 +45,8 @@
         public static class RoomRouting
         {
             public const string Prefix = Rule + "Room";
-            public const string Create = Prefix + "/Create";               
-            public const string Join = Prefix + "/Join";               
+            public const string Create = Prefix + "/Create";
+            public const string Join = Prefix + "/Join";
             public const string Approve = Prefix + "/Approve";
             public const string State = Prefix + "/{roomId}/State";
             public const string Feed = Prefix + "Feed";

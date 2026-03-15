@@ -35,13 +35,9 @@ public class Room : BaseEntity
     // هل النظام أوتوماتيك ولا الكوتش بيختار؟
     public RoomSelectionMode SelectionMode { get; set; } = RoomSelectionMode.Manual_CoachDecision;
 
-    // --- العلاقات ---
-
-    public Guid HostId { get; set; } // الكوتش صاحب الروم
+    public Guid HostId { get; set; } 
     [ForeignKey(nameof(HostId))]
     public virtual ApplicationUser? Host { get; set; }
-
-    // قائمة الناس اللي جوه الروم (سواء جمهور أو استيدج)
     public virtual ICollection<RoomParticipant> Participants { get; set; } = new List<RoomParticipant>();
     public bool IsPrivate { get; set; } = false;
 }

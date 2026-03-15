@@ -1,10 +1,13 @@
 using Cocorra.API.Hubs;
+using Cocorra.API.Seeder;
 using Cocorra.BLL.Services.AdminService;
 using Cocorra.BLL.Services.Auth;
 using Cocorra.BLL.Services.AuthServices;
 using Cocorra.BLL.Services.ChatService;
+using Cocorra.BLL.Services.Email;
 using Cocorra.BLL.Services.FriendService;
 using Cocorra.BLL.Services.NotificationService;
+using Cocorra.BLL.Services.OTPService;
 using Cocorra.BLL.Services.ProfileService;
 using Cocorra.BLL.Services.RolesService;
 using Cocorra.BLL.Services.RoomService;
@@ -69,10 +72,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("CorsPolicy", builder =>
         builder
-            .SetIsOriginAllowed(origin => true) 
+            .SetIsOriginAllowed(origin => true)
             .AllowAnyMethod()
             .AllowAnyHeader()
-            .AllowCredentials()); 
+            .AllowCredentials());
 });
 
 #region AddScopedServices
@@ -87,17 +90,26 @@ builder.Services.AddScoped<IFriendRepository, FriendRepository>();
 builder.Services.AddScoped<IFriendService, FriendService>();
 builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
-builder.Services.AddScoped<IChatService,ChatService>();
-builder.Services.AddScoped<IMessageRepository,MessageRepository>();
-builder.Services.AddScoped<IUploadImage,UploadImage>();
-builder.Services.AddScoped<IProfileService,ProfileService>();
+builder.Services.AddScoped<IChatService, ChatService>();
+builder.Services.AddScoped<IMessageRepository, MessageRepository>();
+builder.Services.AddScoped<IUploadImage, UploadImage>();
+builder.Services.AddScoped<IProfileService, ProfileService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IOTPService, OTPService>();
 builder.Services.AddScoped(typeof(IGenericRepositoryAsync<>), typeof(GenericRepositoryAsync<>));
-builder.Services.AddMediatR(cfg => {
+builder.Services.AddMediatR(cfg =>
+{
     cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
     cfg.RegisterServicesFromAssembly(typeof(Cocorra.BLL.Events.UserRequestedToJoinRoomEvent).Assembly);
 });
 builder.Services.AddScoped<INotificationService, NotificationService>();
 #endregion
+
+
+
+
+
+
 
 #region AddDbContext
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -110,6 +122,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     });
 });
 #endregion
+
+
+
+
 
 #region AddIdentity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(op =>
@@ -124,6 +140,9 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(op =>
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 #endregion
+
+
+
 
 #region Authentication & JWT
 builder.Services.AddAuthentication(options =>
@@ -164,34 +183,43 @@ builder.Services.AddAuthentication(options =>
 });
 #endregion
 
+
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+
     try
     {
         await RoleSeeder.SeedRolesAsync(services);
+
+        await IdentitySeeder.SeedAsync(userManager, roleManager, app.Configuration);
     }
     catch (Exception ex)
     {
         Console.WriteLine($"An error occurred while seeding the database: {ex.Message}");
     }
 }
-
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseCors("CorsPolicy");
-app.UseAuthentication(); 
+
+app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Cocorra API v1");
+});
+
 app.MapHub<RoomHub>("/roomHub");
-app.MapHub<ChatHub>("/chatHub"); 
+app.MapHub<ChatHub>("/chatHub");
 app.MapControllers();
+app.MapGet("/", () => "Welcome to Cocorra API - System is Running Successfully! ");
+
 app.Run();

@@ -31,5 +31,7 @@ namespace Cocorra.BLL.DTOS.Auth
 
         [Required]
         public IFormFile? VoiceVerification { get; set; }
+        [Required]
+        public IFormFile? ProfilePicture { get; set; }
     }
 }

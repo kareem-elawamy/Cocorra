@@ -21,5 +21,6 @@ namespace Cocorra.DAL.Models
         public DateTime CreateAt { get; set; }
         public string? ProfilePicturePath { get; set; }
         public string? Bio { get; set; } 
+        
     }
 }

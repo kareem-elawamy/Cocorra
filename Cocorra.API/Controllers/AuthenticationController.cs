@@ -1,5 +1,6 @@
 using Cocorra.BLL.DTOS.Auth;
 using Cocorra.BLL.Services.Auth;
+using Cocorra.BLL.Services.OTPService;
 using Cocorra.DAL.AppMetaData;
 using Cocorra.DAL.DTOS.Auth;
 using Microsoft.AspNetCore.Authorization;
@@ -14,9 +15,11 @@ namespace Cocorra.API.Controllers
     public class AuthenticationController : ControllerBase
     {
         private readonly IAuthServices _authServices;
+        private readonly IOTPService _otpService;
 
-        public AuthenticationController(IAuthServices authServices)
+        public AuthenticationController(IAuthServices authServices, IOTPService otpService)
         {
+            _otpService = otpService;
             _authServices = authServices;
         }
 
@@ -32,7 +35,7 @@ namespace Cocorra.API.Controllers
         }
 
         [HttpPost(Router.AuthenticationRouting.Login)]
-        public async Task<IActionResult> Login([FromBody] LoginDto dto) 
+        public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
@@ -42,7 +45,7 @@ namespace Cocorra.API.Controllers
             return Ok(result);
         }
 
-        [HttpPost("submit-mbti")] 
+        [HttpPost(Router.AuthenticationRouting.SubmitMbti)]
         public async Task<IActionResult> SubmitMbti([FromBody] SubmitMbtiDto dto)
         {
             var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -54,7 +57,7 @@ namespace Cocorra.API.Controllers
             return Ok(result);
         }
 
-        [HttpPost("forgot-password")] 
+        [HttpPost(Router.AuthenticationRouting.ForgotPassword)]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -63,13 +66,25 @@ namespace Cocorra.API.Controllers
             return Ok(result);
         }
         [Authorize]
-        [HttpPut("update-fcm-token")]
+        [HttpPut(Router.AuthenticationRouting.UpdateFcmToken)]
         public async Task<IActionResult> UpdateFcmToken([FromBody] string fcmToken)
         {
             var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (!Guid.TryParse(userIdString, out Guid userId)) return Unauthorized();
 
             var result = await _authServices.UpdateFcmTokenAsync(userId, fcmToken);
+            return StatusCode((int)result.StatusCode, result);
+        }
+        [HttpPost(Router.AuthenticationRouting.ResendOtp)]
+        public async Task<IActionResult> ResendOtp([FromBody] string email)
+        {
+            var result = await _otpService.ResendOtpAsync(email);
+            return StatusCode((int)result.StatusCode, result);
+        }
+        [HttpGet(Router.AuthenticationRouting.ConfirmEmail)]
+        public async Task<IActionResult> ConfirmEmail([FromQuery] string email, [FromQuery] string otpCode)
+        {
+            var result = await _otpService.VerifyOtpAsync(email, otpCode);
             return StatusCode((int)result.StatusCode, result);
         }
     }
