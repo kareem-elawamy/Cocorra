@@ -103,10 +103,10 @@ namespace Cocorra.BLL.Services.AuthServices
                     var roleResult = await _userManager.AddToRoleAsync(user, "User");
                     if (!roleResult.Succeeded)
                         throw new Exception("Failed to assign role");
-                    var otpCode = await _userManager.GenerateTwoFactorTokenAsync(
-                        user,
-                        TokenOptions.DefaultEmailProvider
-                    );
+                        var otpCode = await _userManager.GenerateTwoFactorTokenAsync(
+                            user,
+                            TokenOptions.DefaultEmailProvider
+                        );
                     var baseUrl = _configuration["AppSettings:BaseUrl"];
                     var fullImagePath = $"{baseUrl}/System/388f7e03b835e6ca1f7c156816047a360bf18efe.png"; 
                     var emailBody = GetOtpHtmlTemplate(user.FirstName!, email: user.Email!, otpCode, fullImagePath);
