@@ -1,8 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 
 namespace Cocorra.DAL.Models;
 
+[Index(nameof(HostId), nameof(Status))]
 public class Room : BaseEntity
 {
     [Required(ErrorMessage = "Room title is required")]

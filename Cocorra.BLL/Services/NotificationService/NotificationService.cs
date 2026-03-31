@@ -18,11 +18,13 @@ namespace Cocorra.BLL.Services.NotificationService
             _notificationRepo = notificationRepo;
         }
 
-        public async Task<Response<IEnumerable<NotificationResponseDto>>> GetMyNotificationsAsync(Guid userId)
+        public async Task<Response<IEnumerable<NotificationResponseDto>>> GetMyNotificationsAsync(Guid userId, int pageNumber = 1, int pageSize = 20)
         {
             var userNotifications = await _notificationRepo.GetTableNoTracking()
                 .Where(n => n.UserId == userId)
                 .OrderByDescending(n => n.CreatedAt)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
                 .Select(n => new NotificationResponseDto
                 {
                     Id = n.Id,
@@ -40,15 +42,23 @@ namespace Cocorra.BLL.Services.NotificationService
 
         public async Task<Response<string>> MarkNotificationAsReadAsync(Guid notificationId, Guid userId)
         {
-            var notification = await _notificationRepo.GetByIdAsync(notificationId);
+            var updatedRows = await _notificationRepo.GetTableAsTracking()
+                .Where(n => n.Id == notificationId && n.UserId == userId)
+                .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true));
 
-            if (notification == null || notification.UserId != userId)
+            if (updatedRows == 0)
                 return NotFound<string>("Notification not found.");
 
-            notification.IsRead = true;
-            await _notificationRepo.UpdateAsync(notification);
-
             return Success("Notification marked as read.");
+        }
+
+        public async Task<Response<string>> MarkAllAsReadAsync(Guid userId)
+        {
+            await _notificationRepo.GetTableAsTracking()
+                .Where(n => n.UserId == userId && !n.IsRead)
+                .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true));
+
+            return Success("All notifications marked as read.");
         }
     }
 }

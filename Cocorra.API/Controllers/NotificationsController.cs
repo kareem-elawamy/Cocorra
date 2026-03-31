@@ -1,4 +1,4 @@
-﻿using Cocorra.BLL.Services.NotificationService;
+using Cocorra.BLL.Services.NotificationService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System;
@@ -20,12 +20,15 @@ namespace Cocorra.API.Controllers
         }
 
         [HttpGet("my-notifications")]
-        public async Task<IActionResult> GetMyNotifications()
+        public async Task<IActionResult> GetMyNotifications([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20)
         {
             var currentUserIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (!Guid.TryParse(currentUserIdString, out Guid currentUserId)) return Unauthorized();
 
-            var result = await _notificationService.GetMyNotificationsAsync(currentUserId);
+            if (pageSize > 100) pageSize = 100;
+            if (pageNumber < 1) pageNumber = 1;
+
+            var result = await _notificationService.GetMyNotificationsAsync(currentUserId, pageNumber, pageSize);
             return StatusCode((int)result.StatusCode, result);
         }
 
@@ -36,6 +39,16 @@ namespace Cocorra.API.Controllers
             if (!Guid.TryParse(currentUserIdString, out Guid currentUserId)) return Unauthorized();
 
             var result = await _notificationService.MarkNotificationAsReadAsync(notificationId, currentUserId);
+            return StatusCode((int)result.StatusCode, result);
+        }
+
+        [HttpPut("mark-all-read")]
+        public async Task<IActionResult> MarkAllRead()
+        {
+            var currentUserIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(currentUserIdString, out Guid currentUserId)) return Unauthorized();
+
+            var result = await _notificationService.MarkAllAsReadAsync(currentUserId);
             return StatusCode((int)result.StatusCode, result);
         }
     }

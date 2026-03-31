@@ -1,3 +1,4 @@
+using System.Threading.RateLimiting;
 using Cocorra.API.Hubs;
 using Cocorra.API.Seeder;
 using Cocorra.BLL.Services.AdminService;
@@ -72,7 +73,8 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("CorsPolicy", builder =>
         builder
-            .SetIsOriginAllowed(origin => true)
+            //.WithOrigins("https://yourproductiondomain.com", "http://localhost:3000") // TODO: Set specific origins
+            .SetIsOriginAllowed(origin => true) // Replace this with explicit origins in production for security
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials());
@@ -131,11 +133,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(op =>
 {
     op.User.RequireUniqueEmail = true;
-    op.Password.RequireLowercase = false;
-    op.Password.RequireUppercase = false;
-    op.Password.RequireNonAlphanumeric = false;
-    op.Password.RequireDigit = false;
-    op.Password.RequiredLength = 6;
+    op.Password.RequireLowercase = true;
+    op.Password.RequireUppercase = true;
+    op.Password.RequireNonAlphanumeric = true;
+    op.Password.RequireDigit = true;
+    op.Password.RequiredLength = 8;
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
@@ -183,6 +185,23 @@ builder.Services.AddAuthentication(options =>
 });
 #endregion
 
+#region Rate Limiting & Exception Handling
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? httpContext.Request.Headers.Host.ToString(),
+            factory: partition => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 100, // max 100 requests per minute per IP
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+});
+#endregion
+
 
 
 var app = builder.Build();
@@ -217,6 +236,24 @@ app.UseStaticFiles(new StaticFileOptions
         ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=604800");
     }
 });
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+else
+{
+    app.UseExceptionHandler(errorApp =>
+    {
+        errorApp.Run(async context =>
+        {
+            context.Response.StatusCode = 500;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync("{\"message\": \"An unexpected internal server error occurred.\", \"succeeded\": false}");
+        });
+    });
+}
+
+app.UseRateLimiter();
 app.UseCors("CorsPolicy");
 
 app.UseAuthentication();

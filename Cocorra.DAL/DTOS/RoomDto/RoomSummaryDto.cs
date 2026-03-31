@@ -1,4 +1,4 @@
-﻿    using System;
+    using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -10,13 +10,12 @@ namespace Cocorra.DAL.DTOS.RoomDto
         public string RoomTitle { get; set; } = string.Empty;
         public string? Description { get; set; }
 
-        public RoomStatus Status { get; set; } // Live أو Scheduled
+        public RoomStatus Status { get; set; }
         public DateTime? ScheduledStartDate { get; set; }
 
         public int ListenersCount { get; set; }
 
-        // هل اليوزر الحالي عامل Reminder للروم دي ولا لأ؟ (عشان شكل الزرار)
         public bool IsReminderSetByMe { get; set; }
-        public required string HostName { get; set; } = string.Empty;
+        public string HostName { get; set; } = string.Empty;
     }
 }

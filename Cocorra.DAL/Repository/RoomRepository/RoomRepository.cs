@@ -31,10 +31,16 @@ namespace Cocorra.DAL.Repository.RoomRepository
                                  .ThenBy(p => p.JoinedAt)
                                  .ToListAsync();
         }
-        public async Task<List<Room>> GetActiveRoomsAsync()
+        public async Task<List<Room>> GetActiveRoomsAsync(int pageNumber = 1, int pageSize = 20)
         {
             return await _dbContext.Rooms
+                .AsNoTracking()
+                .Include(r => r.Host)
                 .Where(r => r.Status == RoomStatus.Live || r.Status == RoomStatus.Scheduled)
+                .OrderBy(r => r.Status == RoomStatus.Live ? 0 : 1)
+                .ThenBy(r => r.StartDate)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync();
         }
 

@@ -76,31 +76,60 @@ namespace Cocorra.BLL.Services.FriendService
                     return BadRequest<string>("You are already friends.");
             }
 
-            var newRequest = new FriendRequest
+            using var transaction = _friendRepo.BeginTransaction();
+            try
             {
-                SenderId = currentUserId,
-                ReceiverId = targetUserId,
-                Status = FriendRequestStatus.Pending,
-                CreatedAt = DateTime.UtcNow
-            };
+                FriendRequest request;
 
-            await _friendRepo.AddAsync(newRequest);
+                if (existingRequest != null && existingRequest.Status == FriendRequestStatus.Rejected)
+                {
+                    existingRequest.SenderId = currentUserId;
+                    existingRequest.ReceiverId = targetUserId;
+                    existingRequest.Status = FriendRequestStatus.Pending;
+                    existingRequest.CreatedAt = DateTime.UtcNow;
+                    await _friendRepo.UpdateAsync(existingRequest);
+                    request = existingRequest;
+                }
+                else
+                {
+                    request = new FriendRequest
+                    {
+                        SenderId = currentUserId,
+                        ReceiverId = targetUserId,
+                        Status = FriendRequestStatus.Pending,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    await _friendRepo.AddAsync(request);
+                }
 
-            var notification = new Notification
+                var notification = new Notification
+                {
+                    UserId = targetUserId,
+                    Title = "New Friend Request",
+                    Message = $"{currentUser?.FirstName} sent you a friend request.",
+                    Type = NotificationType.FriendRequest,
+                    ReferenceId = request.Id,
+                    CreatedAt = DateTime.UtcNow,
+                    IsRead = false
+                };
+                await _notificationRepo.AddAsync(notification);
+
+                transaction.Commit();
+
+                try { await _pushService.SendPushNotificationAsync(targetUserId, "New Friend Request", notification.Message); } catch { }
+
+                return Success("Friend request sent successfully.");
+            }
+            catch (DbUpdateException)
             {
-                UserId = targetUserId,
-                Title = "New Friend Request",
-                Message = $"{currentUser?.FirstName} sent you a friend request.",
-                Type = NotificationType.FriendRequest,
-                ReferenceId = newRequest.Id,
-                CreatedAt = DateTime.UtcNow,
-                IsRead = false
-            };
-            await _notificationRepo.AddAsync(notification);
-
-            _ = _pushService.SendPushNotificationAsync(targetUserId, "New Friend Request", notification.Message);
-
-            return Success("Friend request sent successfully.");
+                transaction.Rollback();
+                return BadRequest<string>("A request is already in progress.");
+            }
+            catch (Exception)
+            {
+                transaction.Rollback();
+                return BadRequest<string>("An internal error occurred while processing the request.");
+            }
         }
 
         public async Task<Response<string>> RespondToFriendRequestAsync(Guid currentUserId, Guid senderId, bool accept)
@@ -110,28 +139,42 @@ namespace Cocorra.BLL.Services.FriendService
             if (request == null)
                 return BadRequest<string>("Friend request not found or already processed.");
 
-            request.Status = accept ? FriendRequestStatus.Accepted : FriendRequestStatus.Rejected;
-            await _friendRepo.UpdateAsync(request);
-
-            if (accept)
+            using var transaction = _friendRepo.BeginTransaction();
+            try
             {
-                var currentUser = await _userManager.FindByIdAsync(currentUserId.ToString());
-                var notification = new Notification
+                request.Status = accept ? FriendRequestStatus.Accepted : FriendRequestStatus.Rejected;
+                await _friendRepo.UpdateAsync(request);
+
+                if (accept)
                 {
-                    UserId = senderId,
-                    Title = "Friend Request Accepted",
-                    Message = $"{currentUser?.FirstName} accepted your friend request.",
-                    Type = NotificationType.FriendAccept,
-                    ReferenceId = request.Id,
-                    CreatedAt = DateTime.UtcNow,
-                    IsRead = false
-                };
-                await _notificationRepo.AddAsync(notification);
+                    var currentUser = await _userManager.FindByIdAsync(currentUserId.ToString());
+                    var notification = new Notification
+                    {
+                        UserId = senderId,
+                        Title = "Friend Request Accepted",
+                        Message = $"{currentUser?.FirstName} accepted your friend request.",
+                        Type = NotificationType.FriendAccept,
+                        ReferenceId = request.Id,
+                        CreatedAt = DateTime.UtcNow,
+                        IsRead = false
+                    };
+                    await _notificationRepo.AddAsync(notification);
+                    transaction.Commit();
 
-                _ = _pushService.SendPushNotificationAsync(senderId, "Friend Request Accepted", notification.Message);
+                    try { await _pushService.SendPushNotificationAsync(senderId, "Friend Request Accepted", notification.Message); } catch { }
+                }
+                else
+                {
+                    transaction.Commit();
+                }
+
+                return Success(accept ? "Friend request accepted." : "Friend request rejected.");
             }
-
-            return Success(accept ? "Friend request accepted." : "Friend request rejected.");
+            catch
+            {
+                transaction.Rollback();
+                return BadRequest<string>("Failed to respond to friend request.");
+            }
         }
 
         public async Task<Response<string>> RemoveFriendOrCancelRequestAsync(Guid currentUserId, Guid targetUserId)
@@ -143,7 +186,7 @@ namespace Cocorra.BLL.Services.FriendService
 
             if (existingRequest.Status == FriendRequestStatus.Pending)
             {
-                var relatedNotification = await _notificationRepo.GetTableNoTracking()
+                var relatedNotification = await _notificationRepo.GetTableAsTracking()
                     .FirstOrDefaultAsync(n => n.ReferenceId == existingRequest.Id && n.Type == NotificationType.FriendRequest);
 
                 if (relatedNotification != null)

@@ -1,4 +1,4 @@
-﻿using Cocorra.BLL.Services.RoomService;
+using Cocorra.BLL.Services.RoomService;
 using Cocorra.DAL.AppMetaData;
 using Cocorra.DAL.DTOS.RoomDto;
 using Microsoft.AspNetCore.Authorization;
@@ -89,12 +89,15 @@ namespace Cocorra.API.Controllers
         }
 
         [HttpGet(Router.RoomRouting.Feed)]
-        public async Task<IActionResult> GetRoomsFeed()
+        public async Task<IActionResult> GetRoomsFeed([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20)
         {
             var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (!Guid.TryParse(userIdString, out Guid userId)) return Unauthorized();
 
-            var result = await _roomService.GetRoomsFeedAsync(userId);
+            if (pageSize > 50) pageSize = 50;
+            if (pageNumber < 1) pageNumber = 1;
+
+            var result = await _roomService.GetRoomsFeedAsync(userId, pageNumber, pageSize);
             return StatusCode((int)result.StatusCode, result);
         }
 
@@ -115,6 +118,16 @@ namespace Cocorra.API.Controllers
             if (!Guid.TryParse(userIdString, out Guid hostId)) return Unauthorized();
 
             var result = await _roomService.StartScheduledRoomAsync(roomId, hostId);
+            return StatusCode((int)result.StatusCode, result);
+        }
+
+        [HttpPost("{roomId:guid}/end")]
+        public async Task<IActionResult> EndRoom([FromRoute] Guid roomId)
+        {
+            var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdString, out Guid hostId)) return Unauthorized();
+
+            var result = await _roomService.EndRoomAsync(roomId, hostId);
             return StatusCode((int)result.StatusCode, result);
         }
     }

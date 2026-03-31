@@ -45,6 +45,7 @@ namespace Cocorra.BLL.Services.ChatService
                 SenderId = m.SenderId,
                 ReceiverId = m.ReceiverId,
                 Content = m.Content,
+                IsRead = m.IsRead,
                 CreatedAt = m.CreatedAt
             }).ToList();
 
@@ -53,6 +54,14 @@ namespace Cocorra.BLL.Services.ChatService
 
         public async Task<Response<MessageDto>> SaveMessageAsync(Guid senderId, Guid receiverId, string content)
         {
+            if (string.IsNullOrWhiteSpace(content))
+                return BadRequest<MessageDto>("Message cannot be empty.");
+
+            content = content.Trim();
+
+            if (senderId == receiverId)
+                return BadRequest<MessageDto>("You cannot send messages to yourself.");
+
             var friendship = await _friendRepo.GetFriendshipRelationAsync(senderId, receiverId);
             if (friendship == null || friendship.Status != Cocorra.DAL.Enums.FriendRequestStatus.Accepted)
                 return BadRequest<MessageDto>("You can only send messages to confirmed friends.");
@@ -74,13 +83,17 @@ namespace Cocorra.BLL.Services.ChatService
                 SenderId = message.SenderId,
                 ReceiverId = message.ReceiverId,
                 Content = message.Content,
+                IsRead = message.IsRead,
                 CreatedAt = message.CreatedAt
             };
 
-            var sender = await _userManager.FindByIdAsync(senderId.ToString());
-            string senderName = sender != null ? $"{sender.FirstName} {sender.LastName}" : "New Message";
-
-            _ = _pushService.SendPushNotificationAsync(receiverId, senderName, content, senderId.ToString());
+            try
+            {
+                var sender = await _userManager.FindByIdAsync(senderId.ToString());
+                string senderName = sender != null ? $"{sender.FirstName} {sender.LastName}" : "New Message";
+                await _pushService.SendPushNotificationAsync(receiverId, senderName, content, senderId.ToString());
+            }
+            catch { }
 
             return Success(dto);
         }

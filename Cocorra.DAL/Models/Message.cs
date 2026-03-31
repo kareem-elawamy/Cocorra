@@ -1,8 +1,10 @@
-﻿using System;
+using Microsoft.EntityFrameworkCore;
+using System;
 using System.ComponentModel.DataAnnotations;
 
 namespace Cocorra.DAL.Models
 {
+    [Index(nameof(ReceiverId), nameof(SenderId), nameof(CreatedAt))]
     public class Message : BaseEntity
     {
         public Guid SenderId { get; set; }

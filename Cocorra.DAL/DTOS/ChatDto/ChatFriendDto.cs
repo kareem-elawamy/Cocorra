@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Cocorra.DAL.DTOS.ChatDto
 {
@@ -6,7 +6,8 @@ namespace Cocorra.DAL.DTOS.ChatDto
     {
         public Guid FriendId { get; set; }
         public string FullName { get; set; } = string.Empty;
-        public string? LastMessage { get; set; }
+        public string ProfilePicturePath { get; set; } = string.Empty;
+        public string LastMessage { get; set; } = string.Empty;
         public DateTime? LastMessageDate { get; set; }
         public int UnreadCount { get; set; }
     }

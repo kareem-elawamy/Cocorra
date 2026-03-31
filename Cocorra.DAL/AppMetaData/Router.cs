@@ -50,8 +50,8 @@ namespace Cocorra.DAL.AppMetaData
             public const string Join = Prefix + "/Join";
             public const string Approve = Prefix + "/Approve";
             public const string State = Prefix + "/{roomId}/State";
-            public const string Feed = Prefix + "Feed";
-            public const string toggleReminder = Prefix + "{roomId}/toggle-reminder";
+            public const string Feed = Prefix + "/Feed";
+            public const string toggleReminder = Prefix + "/{roomId}/toggle-reminder";
         }
     }
 }

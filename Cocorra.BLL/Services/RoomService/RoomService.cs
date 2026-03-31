@@ -5,7 +5,7 @@ using Cocorra.DAL.Models;
 using Cocorra.DAL.Repository.RoomRepository;
 using Cocorra.BLL.Base;
 using MediatR;
-using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 namespace Cocorra.BLL.Services.RoomService;
 
 public class RoomService : ResponseHandler, IRoomService
@@ -206,47 +206,59 @@ public class RoomService : ResponseHandler, IRoomService
         return Success(roomState);
     }
 
-    public async Task<Response<IEnumerable<RoomSummaryDto>>> GetRoomsFeedAsync(Guid currentUserId)
+    public async Task<Response<IEnumerable<RoomSummaryDto>>> GetRoomsFeedAsync(Guid currentUserId, int pageNumber = 1, int pageSize = 20)
     {
-        var activeRooms = await _roomRepo.GetActiveRoomsAsync();
-        var resultList = new List<RoomSummaryDto>();
+        var activeRooms = await _roomRepo.GetActiveRoomsAsync(pageNumber, pageSize);
+        if (!activeRooms.Any())
+            return Success<IEnumerable<RoomSummaryDto>>(Enumerable.Empty<RoomSummaryDto>());
 
-        foreach (var room in activeRooms)
+        var roomIds = activeRooms.Select(r => r.Id).ToList();
+
+        var liveRoomIds = activeRooms.Where(r => r.Status == RoomStatus.Live).Select(r => r.Id).ToList();
+        var scheduledRoomIds = activeRooms.Where(r => r.Status == RoomStatus.Scheduled).Select(r => r.Id).ToList();
+
+        var participantCounts = new Dictionary<Guid, int>();
+        if (liveRoomIds.Any())
         {
-            var dto = new RoomSummaryDto
-            {
-                Id = room.Id,
-                RoomTitle = room.RoomTitle,
-                Description = room.Description,
-                Status = room.Status,
-                ScheduledStartDate = room.StartDate,
-                IsReminderSetByMe = false,
-                ListenersCount = 0,
-                HostName = room.Host!.FirstName + " " + room.Host.LastName,
-            };
+            var allParticipants = await _roomRepo.GetTableNoTracking()
+                .SelectMany(r => r.Participants)
+                .Where(p => liveRoomIds.Contains(p.RoomId) && p.Status == ParticipantStatus.Active)
+                .GroupBy(p => p.RoomId)
+                .Select(g => new { RoomId = g.Key, Count = g.Count() })
+                .ToListAsync();
 
-            if (room.Status == RoomStatus.Live)
-            {
-                var participants = await _roomRepo.GetRoomParticipantsAsync(room.Id);
-                dto.ListenersCount = participants.Count(p => p.Status == ParticipantStatus.Active);
-            }
-            else if (room.Status == RoomStatus.Scheduled)
-            {
-                var reminder = await _roomRepo.GetRoomReminderAsync(room.Id, currentUserId);
-                dto.IsReminderSetByMe = reminder != null;
-
-                dto.ListenersCount = await _roomRepo.GetRoomRemindersCountAsync(room.Id);
-            }
-
-            resultList.Add(dto);
+            foreach (var p in allParticipants)
+                participantCounts[p.RoomId] = p.Count;
         }
 
-        var sortedList = resultList
-            .OrderBy(r => r.Status == RoomStatus.Live ? 0 : 1)
-            .ThenBy(r => r.ScheduledStartDate)
-            .ToList();
+        var reminderCounts = new Dictionary<Guid, int>();
+        var userReminders = new HashSet<Guid>();
+        if (scheduledRoomIds.Any())
+        {
+            // Per-room lookups only for the paginated set (max 20 rooms)
+            foreach (var roomId in scheduledRoomIds)
+            {
+                reminderCounts[roomId] = await _roomRepo.GetRoomRemindersCountAsync(roomId);
+                var reminder = await _roomRepo.GetRoomReminderAsync(roomId, currentUserId);
+                if (reminder != null) userReminders.Add(roomId);
+            }
+        }
 
-        return Success<IEnumerable<RoomSummaryDto>>(sortedList);
+        var resultList = activeRooms.Select(room => new RoomSummaryDto
+        {
+            Id = room.Id,
+            RoomTitle = room.RoomTitle,
+            Description = room.Description,
+            Status = room.Status,
+            ScheduledStartDate = room.StartDate,
+            HostName = room.Host != null ? $"{room.Host.FirstName} {room.Host.LastName}" : "Unknown",
+            ListenersCount = room.Status == RoomStatus.Live
+                ? (participantCounts.TryGetValue(room.Id, out var c) ? c : 0)
+                : (reminderCounts.TryGetValue(room.Id, out var rc) ? rc : 0),
+            IsReminderSetByMe = userReminders.Contains(room.Id)
+        }).ToList();
+
+        return Success<IEnumerable<RoomSummaryDto>>(resultList);
     }
 
     public async Task<Response<string>> StartScheduledRoomAsync(Guid roomId, Guid hostId)
@@ -327,5 +339,58 @@ public class RoomService : ResponseHandler, IRoomService
             await _roomRepo.AddRoomReminderAsync(reminder);
             return Success("Reminder set successfully.");
         }
+    }
+
+    public async Task<Response<string>> EndRoomAsync(Guid roomId, Guid hostId)
+    {
+        var room = await _roomRepo.GetByIdAsync(roomId);
+        if (room == null) return NotFound<string>("Room not found.");
+
+        if (room.HostId != hostId)
+            return BadRequest<string>("Only the host can end this room.");
+
+        if (room.Status == RoomStatus.Ended || room.Status == RoomStatus.Cancelled)
+            return BadRequest<string>("This room has already ended.");
+
+        room.Status = RoomStatus.Ended;
+        await _roomRepo.UpdateAsync(room);
+
+        var participants = await _roomRepo.GetRoomParticipantsAsync(roomId);
+        foreach (var p in participants.Where(p => p.Status == ParticipantStatus.Active || p.Status == ParticipantStatus.PendingApproval))
+        {
+            if (!p.IsMuted && p.LastUnmutedAt.HasValue)
+            {
+                p.TotalSpokenSeconds += (DateTime.UtcNow - p.LastUnmutedAt.Value).TotalSeconds;
+                p.LastUnmutedAt = null;
+            }
+            p.Status = ParticipantStatus.Left;
+            p.IsOnStage = false;
+            p.IsMuted = true;
+            p.IsHandRaised = false;
+            await _roomRepo.UpdateParticipantAsync(p);
+        }
+
+        await _roomRepo.SaveChangesAsync();
+        return Success("Room has been ended successfully.");
+    }
+
+    public async Task LeaveRoomCleanupAsync(Guid roomId, Guid userId)
+    {
+        var participant = await _roomRepo.GetParticipantAsync(roomId, userId);
+        if (participant == null || participant.Status != ParticipantStatus.Active) return;
+
+        if (!participant.IsMuted && participant.LastUnmutedAt.HasValue)
+        {
+            participant.TotalSpokenSeconds += (DateTime.UtcNow - participant.LastUnmutedAt.Value).TotalSeconds;
+            participant.LastUnmutedAt = null;
+        }
+
+        participant.Status = ParticipantStatus.Left;
+        participant.IsOnStage = false;
+        participant.IsMuted = true;
+        participant.IsHandRaised = false;
+
+        await _roomRepo.UpdateParticipantAsync(participant);
+        await _roomRepo.SaveChangesAsync();
     }
 }
