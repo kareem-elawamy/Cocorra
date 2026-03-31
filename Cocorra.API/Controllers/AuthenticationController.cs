@@ -99,17 +99,17 @@ namespace Cocorra.API.Controllers
             return StatusCode((int)result.StatusCode, result);
         }
 
-        [Authorize]
+        [AllowAnonymous]
         [HttpPost(Router.AuthenticationRouting.ReRecordVoice)]
-        public async Task<IActionResult> ReRecordVoice(IFormFile voiceFile)
+        public async Task<IActionResult> ReRecordVoice([FromForm] string email, IFormFile voiceFile)
         {
-            var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!Guid.TryParse(userIdString, out Guid userId)) return Unauthorized();
+            if (string.IsNullOrWhiteSpace(email))
+                return BadRequest("Email is required.");
 
             if (voiceFile == null || voiceFile.Length == 0)
                 return BadRequest("No voice file uploaded.");
 
-            var result = await _authServices.ReRecordVoiceAsync(userId, voiceFile);
+            var result = await _authServices.ReRecordVoiceAsync(email, voiceFile);
             return StatusCode((int)result.StatusCode, result);
         }
 

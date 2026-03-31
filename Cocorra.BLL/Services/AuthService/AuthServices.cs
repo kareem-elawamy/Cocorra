@@ -125,31 +125,31 @@ namespace Cocorra.BLL.Services.AuthServices
             });
         }
 
-        public async Task<Response<AuthModel>> LoginAsync(LoginDto dto)
+        public async Task<Response<object>> LoginAsync(LoginDto dto)
         {
             var user = await _userManager.FindByEmailAsync(dto.Email!);
             if (user == null || !await _userManager.CheckPasswordAsync(user, dto.Password!))
             {
-                return BadRequest<AuthModel>("Invalid Email or Password");
+                return BadRequest<object>("Invalid Email or Password");
             }
             if (!user.EmailConfirmed)
             {
-                return BadRequest<AuthModel>("Please confirm your email before logging in.");
+                return BadRequest<object>("Please confirm your email before logging in.");
             }
             switch (user.Status)
             {
                 case UserStatus.Pending:
-                    return BadRequest<AuthModel>("Your account is still pending approval. We usually respond within 24 hours.");
+                    return BadRequest<object>(new { userStatus = user.Status.ToString() }, "Your account is still pending approval. We usually respond within 24 hours.");
                 case UserStatus.Rejected:
-                    return BadRequest<AuthModel>("Your account has been rejected.");
+                    return BadRequest<object>(new { userStatus = user.Status.ToString() }, "Your account has been rejected.");
                 case UserStatus.Banned:
-                    return BadRequest<AuthModel>("Your account has been banned.");
+                    return BadRequest<object>(new { userStatus = user.Status.ToString() }, "Your account has been banned.");
                 case UserStatus.ReRecord:
-                    return BadRequest<AuthModel>("Your voice verification was not accepted. Please re-record and resubmit.");
+                    return BadRequest<object>(new { userStatus = user.Status.ToString() }, "Your voice verification was not accepted. Please re-record and resubmit.");
                 case UserStatus.Active:
                     break;
                 default:
-                    return BadRequest<AuthModel>("Invalid user status.");
+                    return BadRequest<object>("Invalid user status.");
             }
 
             var jwtToken = await GenerateJwtToken(user);
@@ -163,7 +163,7 @@ namespace Cocorra.BLL.Services.AuthServices
                 IsAuthenticated = true,
                 Roles = roles.ToList()
             };
-            return Success(authModel);
+            return Success<object>(authModel);
         }
 
         public async Task<Response<string>> SubmitMbtiAsync(Guid userId, SubmitMbtiDto dto)
@@ -386,9 +386,9 @@ namespace Cocorra.BLL.Services.AuthServices
     """;
         }
 
-        public async Task<Response<string>> ReRecordVoiceAsync(Guid userId, Microsoft.AspNetCore.Http.IFormFile voiceFile)
+        public async Task<Response<string>> ReRecordVoiceAsync(string email, Microsoft.AspNetCore.Http.IFormFile voiceFile)
         {
-            var user = await _userManager.FindByIdAsync(userId.ToString());
+            var user = await _userManager.FindByEmailAsync(email);
             if (user == null) return BadRequest<string>("User not found.");
 
             if (user.Status != UserStatus.ReRecord)

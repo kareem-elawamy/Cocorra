@@ -58,6 +58,18 @@ namespace Cocorra.BLL.Base
                 Errors = new List<string>()
             };
         }
+        
+        public Response<T> BadRequest<T>(T data, string message)
+        {
+            return new Response<T>()
+            {
+                Data = data,
+                StatusCode = HttpStatusCode.BadRequest,
+                Succeeded = false,
+                Message = message,
+                Errors = new List<string>()
+            };
+        }
         public Response<T> UnprocessableEntity<T>(string message = "Validation Failed", List<string>? errors = null)
         {
             return new Response<T>()

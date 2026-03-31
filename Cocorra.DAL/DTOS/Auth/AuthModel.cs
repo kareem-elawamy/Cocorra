@@ -14,5 +14,6 @@ namespace Cocorra.BLL.DTOS.Auth
         public List<string>? Roles { get; set; }
         public string? Token { get; set; }
         public DateTime ExpiresOn { get; set; }
+        public string? UserStatus { get; set; }
     }
 }
