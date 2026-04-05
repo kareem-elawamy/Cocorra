@@ -5,6 +5,7 @@ using Cocorra.DAL.Models;
 using Cocorra.BLL.Base;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -17,11 +18,20 @@ namespace Cocorra.BLL.Services.AdminService
     {
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IUploadVoice _uploadVoice;
+        private readonly string _baseUrl;
 
-        public AdminService(UserManager<ApplicationUser> userManager, IUploadVoice uploadVoice)
+        public AdminService(UserManager<ApplicationUser> userManager, IUploadVoice uploadVoice, IConfiguration configuration)
         {
             _userManager = userManager;
             _uploadVoice = uploadVoice;
+            _baseUrl = configuration["AppSettings:BaseUrl"]?.TrimEnd('/') ?? "";
+        }
+
+        private string? BuildFullUrl(string? relativePath)
+        {
+            if (string.IsNullOrWhiteSpace(relativePath))
+                return null;
+            return $"{_baseUrl}/{relativePath.Replace("\\", "/").TrimStart('/')}";
         }
 
         public async Task<Response<string>> ChangeUserStatusAsync(Guid userId, UserStatus newStatus)
@@ -87,21 +97,35 @@ namespace Cocorra.BLL.Services.AdminService
 
             var totalCount = await query.CountAsync();
 
-            var users = await query
+            var rawUsers = await query
                 .OrderByDescending(u => u.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(u => new UserDto
+                .Select(u => new
                 {
-                    Id = u.Id.ToString(),
-                    FullName = $"{u.FirstName} {u.LastName}",
-                    Email = u.Email ?? "",
-                    Age = u.Age,
-                    MBTI = u.MBTI ?? "N/A",
-                    Status = u.Status.ToString(),
-                    VoicePath = u.VoiceVerificationPath ?? ""
+                    u.Id,
+                    u.FirstName,
+                    u.LastName,
+                    u.Email,
+                    u.Age,
+                    u.MBTI,
+                    u.Status,
+                    u.VoiceVerificationPath,
+                    u.CreatedAt
                 })
                 .ToListAsync();
+
+            var users = rawUsers.Select(u => new UserDto
+            {
+                Id = u.Id.ToString(),
+                FullName = $"{u.FirstName} {u.LastName}",
+                Email = u.Email ?? "",
+                Age = u.Age,
+                MBTI = u.MBTI ?? "N/A",
+                Status = u.Status.ToString(),
+                CreatedAt = u.CreatedAt,
+                VoicePath = BuildFullUrl(u.VoiceVerificationPath)
+            }).ToList();
 
             var response = Success<IEnumerable<UserDto>>(users);
             response.Meta = new { TotalCount = totalCount, CurrentPage = page, PageSize = pageSize };
@@ -124,7 +148,8 @@ namespace Cocorra.BLL.Services.AdminService
                 Age = user.Age,
                 MBTI = user.MBTI ?? "N/A",
                 Status = user.Status.ToString(),
-                VoicePath = user.VoiceVerificationPath ?? ""
+                CreatedAt = user.CreatedAt,
+                VoicePath = BuildFullUrl(user.VoiceVerificationPath)
             };
 
             return Success(userDto);
