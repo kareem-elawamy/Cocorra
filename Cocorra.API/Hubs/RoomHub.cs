@@ -34,14 +34,35 @@ namespace Cocorra.API.Hubs
             {
                 try
                 {
-                    await _roomService.LeaveRoomCleanupAsync(mapping.RoomId, mapping.UserId);
-
-                    var roomIdString = mapping.RoomId.ToString();
-                    await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomIdString);
-                    await Clients.Group(roomIdString).SendAsync("UserLeft", new
+                    // Check if this user is the host — if so, end the room entirely
+                    var room = await _roomRepo.GetByIdAsync(mapping.RoomId);
+                    if (room != null && room.HostId == mapping.UserId && room.Status == RoomStatus.Live)
                     {
-                        UserId = mapping.UserId
-                    });
+                        // Host disconnected — end the room for everyone
+                        await _roomService.EndRoomAsync(mapping.RoomId, mapping.UserId);
+
+                        var roomIdStr = mapping.RoomId.ToString();
+                        await Clients.Group(roomIdStr).SendAsync("RoomEnded", new
+                        {
+                            RoomId = mapping.RoomId,
+                            Message = "The host has disconnected. This room has been ended."
+                        });
+
+                        // Purge all connections for this room
+                        PurgeRoomConnections(mapping.RoomId);
+                    }
+                    else
+                    {
+                        // Regular participant disconnect
+                        await _roomService.LeaveRoomCleanupAsync(mapping.RoomId, mapping.UserId);
+
+                        var roomIdString = mapping.RoomId.ToString();
+                        await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomIdString);
+                        await Clients.Group(roomIdString).SendAsync("UserLeft", new
+                        {
+                            UserId = mapping.UserId
+                        });
+                    }
                 }
                 catch { }
             }
@@ -64,6 +85,21 @@ namespace Cocorra.API.Hubs
             return result;
         }
 
+        /// <summary>
+        /// Removes all _connections entries that belong to a specific room.
+        /// Called when a room ends to prevent stale OnDisconnectedAsync cleanup.
+        /// </summary>
+        private static void PurgeRoomConnections(Guid roomId)
+        {
+            var connectionIds = _connections
+                .Where(kvp => kvp.Value.RoomId == roomId)
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            foreach (var connId in connectionIds)
+                _connections.TryRemove(connId, out _);
+        }
+
         public async Task JoinRoom(string roomId)
         {
             var userId = GetUserId();
@@ -76,11 +112,32 @@ namespace Cocorra.API.Hubs
             var participant = await _roomRepo.GetParticipantAsync(roomGuid, userId);
 
             if (participant == null)
-                throw new HubException("You are not a member of this room.");
+                throw new HubException("You are not a member of this room. Please join via the REST API first.");
             if (participant.Status == ParticipantStatus.PendingApproval)
                 throw new HubException("Your request is still pending approval from the host.");
             if (participant.Status == ParticipantStatus.Kicked || participant.Status == ParticipantStatus.Rejected)
                 throw new HubException("You are not allowed to join this room.");
+
+            // Re-activate users who had previously left (e.g., disconnect/reconnect)
+            if (participant.Status == ParticipantStatus.Left)
+            {
+                participant.Status = ParticipantStatus.Active;
+                participant.JoinedAt = DateTime.UtcNow;
+                participant.IsOnStage = false;
+                participant.IsMuted = true;
+                participant.IsHandRaised = false;
+                await _roomRepo.UpdateParticipantAsync(participant);
+                await _roomRepo.SaveChangesAsync();
+            }
+
+            // If this user already has an old connection tracked, remove it first
+            var existingConnId = _connections
+                .FirstOrDefault(kvp => kvp.Value.UserId == userId && kvp.Value.RoomId == roomGuid).Key;
+            if (existingConnId != null && existingConnId != Context.ConnectionId)
+            {
+                _connections.TryRemove(existingConnId, out _);
+                await Groups.RemoveFromGroupAsync(existingConnId, roomId);
+            }
 
             // Track connection for disconnect cleanup
             _connections[Context.ConnectionId] = (userId, roomGuid);
@@ -132,6 +189,25 @@ namespace Cocorra.API.Hubs
             });
         }
 
+        public async Task LowerHand(string roomId)
+        {
+            var userId = GetUserId();
+            var roomGuid = ParseGuidSafe(roomId, "Room ID");
+
+            var participant = await _roomRepo.GetParticipantAsync(roomGuid, userId);
+            if (participant == null) throw new HubException("You are not a member of this room.");
+
+            participant.IsHandRaised = false;
+            await _roomRepo.UpdateParticipantAsync(participant);
+            await _roomRepo.SaveChangesAsync();
+
+            await Clients.Group(roomId).SendAsync("HandLowered", new
+            {
+                UserId = userId,
+                Name = participant.User?.FirstName + " " + participant.User?.LastName
+            });
+        }
+
         public async Task ApproveToStage(string roomId, string targetUserId)
         {
             var hostId = GetUserId();
@@ -151,6 +227,7 @@ namespace Cocorra.API.Hubs
 
             participant.IsOnStage = true;
             participant.IsHandRaised = false;
+            participant.IsMuted = true; // Start muted on stage, user unmutes when ready
 
             await _roomRepo.UpdateParticipantAsync(participant);
             await _roomRepo.SaveChangesAsync();
@@ -185,6 +262,7 @@ namespace Cocorra.API.Hubs
 
             participant.IsOnStage = false;
             participant.IsMuted = true;
+            participant.IsHandRaised = false; // Clear stale hand-raise flag
 
             await _roomRepo.UpdateParticipantAsync(participant);
             await _roomRepo.SaveChangesAsync();
@@ -298,12 +376,29 @@ namespace Cocorra.API.Hubs
             var participant = await _roomRepo.GetParticipantAsync(roomGuid, targetGuid);
             if (participant == null) return;
 
+            // Finalize spoken time if they were unmuted on stage
+            if (!participant.IsMuted && participant.LastUnmutedAt.HasValue)
+            {
+                participant.TotalSpokenSeconds += (DateTime.UtcNow - participant.LastUnmutedAt.Value).TotalSeconds;
+                participant.LastUnmutedAt = null;
+            }
+
             participant.Status = ParticipantStatus.Kicked;
             participant.IsOnStage = false;
             participant.IsMuted = true;
+            participant.IsHandRaised = false;
 
             await _roomRepo.UpdateParticipantAsync(participant);
             await _roomRepo.SaveChangesAsync();
+
+            // Remove kicked user's connection from the group and purge tracking
+            var kickedConnId = _connections
+                .FirstOrDefault(kvp => kvp.Value.UserId == targetGuid && kvp.Value.RoomId == roomGuid).Key;
+            if (kickedConnId != null)
+            {
+                _connections.TryRemove(kickedConnId, out _);
+                await Groups.RemoveFromGroupAsync(kickedConnId, roomId);
+            }
 
             await Clients.Group(roomId).SendAsync("UserKicked", new
             {
@@ -327,6 +422,9 @@ namespace Cocorra.API.Hubs
                 RoomId = roomGuid,
                 Message = "The host has ended this room."
             });
+
+            // Purge all stale connection mappings for this room
+            PurgeRoomConnections(roomGuid);
         }
     }
 }

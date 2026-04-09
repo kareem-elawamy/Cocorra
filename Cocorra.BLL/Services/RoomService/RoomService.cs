@@ -250,6 +250,7 @@ public class RoomService : ResponseHandler, IRoomService
             {
                 UserId = p.UserId,
                 Name = p.User?.FirstName + " " + p.User?.LastName,
+                ProfilePicture = BuildFullUrl(p.User?.ProfilePicturePath),
                 IsOnStage = p.IsOnStage,
                 IsMuted = p.IsMuted,
                 IsHandRaised = p.IsHandRaised,

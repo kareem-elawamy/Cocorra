@@ -173,7 +173,7 @@ builder.Services.AddAuthentication(options =>
             var path = context.HttpContext.Request.Path;
 
             if (!string.IsNullOrEmpty(accessToken) &&
-                (path.StartsWithSegments("/chatHub") || path.StartsWithSegments("/roomHub")))
+                (path.StartsWithSegments("/hubs/chat") || path.StartsWithSegments("/hubs/rooms")))
             {
                 context.Token = accessToken;
             }
@@ -263,8 +263,8 @@ app.UseSwaggerUI(c =>
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Cocorra API v1");
 });
 
-app.MapHub<RoomHub>("/roomHub");
-app.MapHub<ChatHub>("/chatHub");
+app.MapHub<RoomHub>("/hubs/rooms");
+app.MapHub<ChatHub>("/hubs/chat");
 app.MapControllers();
 app.MapGet("/", () => "Welcome to Cocorra API - System is Running Successfully! ");
 

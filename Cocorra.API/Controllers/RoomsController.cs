@@ -57,7 +57,7 @@ namespace Cocorra.API.Controllers
         }
 
         [HttpPost(Router.RoomRouting.Approve)]
-        public async Task<IActionResult> Approve([FromQuery] Guid roomId, [FromQuery] Guid userId)
+        public async Task<IActionResult> Approve([FromRoute] Guid roomId, [FromRoute] Guid userId)
         {
             var currentUserIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (!Guid.TryParse(currentUserIdString, out Guid hostId))
@@ -99,7 +99,7 @@ namespace Cocorra.API.Controllers
             return StatusCode((int)result.StatusCode, result);
         }
 
-        [HttpPost(Router.RoomRouting.toggleReminder)]
+        [HttpPost(Router.RoomRouting.ToggleReminder)]
         public async Task<IActionResult> ToggleReminder([FromRoute] Guid roomId)
         {
             var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
