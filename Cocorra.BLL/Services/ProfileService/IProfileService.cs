@@ -10,5 +10,6 @@ namespace Cocorra.BLL.Services.ProfileService
         Task<Response<PublicProfileDto>> GetUserProfileAsync(Guid currentUserId, Guid targetUserId);
         Task<Response<MyProfileDto>> UpdateProfileAsync(Guid userId, UpdateProfileDto dto);
         Task<Response<string>> UploadProfilePictureAsync(Guid userId, IFormFile imageFile);
+        Task<Response<string>> UpdateAvatarPresetAsync(Guid userId, UpdateAvatarPresetDto dto);
     }
 }

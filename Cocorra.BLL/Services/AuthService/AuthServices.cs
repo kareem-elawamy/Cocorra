@@ -424,5 +424,22 @@ namespace Cocorra.BLL.Services.AuthServices
 
             return Success("Password updated successfully.");
         }
+
+        public async Task<Response<string>> DeleteAccountAsync(Guid userId)
+        {
+            var user = await _userManager.FindByIdAsync(userId.ToString());
+            if (user == null) return BadRequest<string>("User not found.");
+
+            // For now, doing a hard delete via UserManager
+            var result = await _userManager.DeleteAsync(user);
+            
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                return BadRequest<string>($"Account deletion failed: {errors}");
+            }
+
+            return Success("Account deleted successfully.");
+        }
     }
 }

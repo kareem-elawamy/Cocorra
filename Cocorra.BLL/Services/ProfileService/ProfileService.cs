@@ -123,5 +123,23 @@ namespace Cocorra.BLL.Services.ProfileService
 
             return Success(newImagePath, "Profile picture updated successfully.");
         }
+
+        public async Task<Response<string>> UpdateAvatarPresetAsync(Guid userId, UpdateAvatarPresetDto dto)
+        {
+            var user = await _userManager.FindByIdAsync(userId.ToString());
+            if (user == null) return NotFound<string>("User not found.");
+
+            // Update with preset key/path directly (no file upload)
+            user.ProfilePicturePath = dto.AvatarPresetKey;
+            
+            var result = await _userManager.UpdateAsync(user);
+
+            if (!result.Succeeded)
+            {
+                return BadRequest<string>("Failed to update avatar preset.");
+            }
+
+            return Success(user.ProfilePicturePath, "Avatar preset updated successfully.");
+        }
     }
 }

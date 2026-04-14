@@ -125,5 +125,16 @@ namespace Cocorra.API.Controllers
             var result = await _authServices.UpdatePasswordAsync(userId, dto.CurrentPassword, dto.NewPassword);
             return StatusCode((int)result.StatusCode, result);
         }
+
+        [Authorize]
+        [HttpDelete(Router.AuthenticationRouting.DeleteAccount)]
+        public async Task<IActionResult> DeleteAccount()
+        {
+            var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdString, out Guid userId)) return Unauthorized();
+
+            var result = await _authServices.DeleteAccountAsync(userId);
+            return StatusCode((int)result.StatusCode, result);
+        }
     }
 }

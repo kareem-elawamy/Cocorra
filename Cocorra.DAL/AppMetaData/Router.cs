@@ -19,6 +19,7 @@ namespace Cocorra.DAL.AppMetaData
             public const string ResetPassword = Prefix + "/ResetPassword"; // POST
             public const string ReRecordVoice = Prefix + "/ReRecordVoice"; // POST
             public const string UpdatePassword = Prefix + "/UpdatePassword"; // PUT
+            public const string DeleteAccount = Prefix + "/DeleteAccount"; // DELETE
         }
 
         public static class AdminRouting
@@ -56,6 +57,19 @@ namespace Cocorra.DAL.AppMetaData
             public const string ToggleReminder = Prefix + "/{roomId:guid}/toggle-reminder"; // POST
             public const string Start = Prefix + "/{roomId:guid}/Start";                    // POST
             public const string End = Prefix + "/{roomId:guid}/End";                        // POST
+        }
+
+        public static class ProfileRouting
+        {
+            public const string Prefix = Rule + "Profile";
+            public const string UpdateAvatarPreset = Prefix + "/update-avatar-preset"; // PUT
+        }
+
+        public static class SupportRouting
+        {
+            public const string Prefix = Rule + "Support";
+            public const string SubmitTicket = Prefix + "/Ticket"; // POST
+            public const string SubmitReport = Prefix + "/Report"; // POST
         }
     }
 }

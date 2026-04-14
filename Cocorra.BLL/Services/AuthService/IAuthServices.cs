@@ -18,5 +18,6 @@ namespace Cocorra.BLL.Services.Auth
         Task<Response<string>> ResetPasswordAsync(ResetPasswordDto dto);
         Task<Response<string>> ReRecordVoiceAsync(string email, Microsoft.AspNetCore.Http.IFormFile voiceFile);
         Task<Response<string>> UpdatePasswordAsync(Guid userId, string currentPassword, string newPassword);
+        Task<Response<string>> DeleteAccountAsync(Guid userId);
     }
 }

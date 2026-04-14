@@ -1,6 +1,8 @@
-﻿using Cocorra.BLL.Services.ProfileService;
+using Cocorra.BLL.Services.ProfileService;
 using Cocorra.DAL.DTOS.ProfileDto;
+using Cocorra.DAL.AppMetaData;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Security.Claims;
@@ -59,6 +61,18 @@ namespace Cocorra.API.Controllers
                 return BadRequest("No file uploaded.");
 
             var result = await _profileService.UploadProfilePictureAsync(userId, file);
+            return StatusCode((int)result.StatusCode, result);
+        }
+
+        [HttpPut(Router.ProfileRouting.UpdateAvatarPreset)]
+        public async Task<IActionResult> UpdateAvatarPreset([FromBody] UpdateAvatarPresetDto dto)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdString, out Guid userId)) return Unauthorized();
+
+            var result = await _profileService.UpdateAvatarPresetAsync(userId, dto);
             return StatusCode((int)result.StatusCode, result);
         }
     }

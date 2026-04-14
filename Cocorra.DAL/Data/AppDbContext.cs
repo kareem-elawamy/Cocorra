@@ -19,6 +19,9 @@ namespace Cocorra.DAL.Data
         public DbSet<FriendRequest> FriendRequests { get; set; }
         public DbSet<RoomReminder> RoomReminders { get; set; }
         public DbSet<Message> Messages { get; set; }
+        public DbSet<SupportTicket> SupportTickets { get; set; }
+        public DbSet<Report> Reports { get; set; }
+
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
@@ -135,6 +138,27 @@ namespace Cocorra.DAL.Data
             builder.Entity<Room>()
                 .HasIndex(r => r.Status)
                 .HasDatabaseName("IX_Rooms_Status");
+
+            // ============================================================
+            // 5. Reports (Prevent cascade cycle on Reporter)
+            // ============================================================
+            builder.Entity<Report>()
+                .HasOne(r => r.Reporter)
+                .WithMany()
+                .HasForeignKey(r => r.ReporterId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<Report>()
+                .HasOne(r => r.ReportedUser)
+                .WithMany()
+                .HasForeignKey(r => r.ReportedUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            builder.Entity<SupportTicket>()
+                .HasOne(st => st.User)
+                .WithMany()
+                .HasForeignKey(st => st.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
         }   
 
     }
