@@ -456,4 +456,31 @@ public class RoomService : ResponseHandler, IRoomService
         await _roomRepo.UpdateParticipantAsync(participant);
         await _roomRepo.SaveChangesAsync();
     }
+
+    public async Task<Response<IEnumerable<RoomSummaryDto>>> GetEndedRoomsHistoryAsync(int pageNumber = 1, int pageSize = 20)
+    {
+        var endedRooms = await _roomRepo.GetEndedRoomsAsync(pageNumber, pageSize);
+        if (!endedRooms.Any())
+            return Success<IEnumerable<RoomSummaryDto>>(Enumerable.Empty<RoomSummaryDto>());
+
+        var resultList = endedRooms.Select(room => new RoomSummaryDto
+        {
+            Id = room.Id,
+            RoomTitle = room.RoomTitle,
+            Description = room.Description,
+            Status = room.Status,
+            ScheduledStartDate = room.StartDate,
+            DurationHours = room.DurationHours,
+            Category = room.Category,
+            CategoryName = room.Category.ToString(),
+            HostId = room.HostId,
+            HostName = room.Host != null ? $"{room.Host.FirstName} {room.Host.LastName}" : "Unknown",
+            HostProfilePicture = room.Host != null ? BuildFullUrl(room.Host.ProfilePicturePath) : null,
+            RoomImage = BuildFullUrl(room.ImagePath),
+            ListenersCount = room.Participants.Count,
+            IsReminderSetByMe = false
+        }).ToList();
+
+        return Success<IEnumerable<RoomSummaryDto>>(resultList);
+    }
 }

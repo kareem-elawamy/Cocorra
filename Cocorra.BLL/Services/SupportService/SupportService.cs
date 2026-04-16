@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Cocorra.BLL.Base;
+using Cocorra.BLL.Services.RealTimeNotifier;
 using Cocorra.BLL.Services.Upload;
 using Cocorra.DAL.DTOS.ReportDto;
 using Cocorra.DAL.DTOS.SupportDto;
@@ -20,17 +21,20 @@ namespace Cocorra.BLL.Services.SupportService
         private readonly IUploadImage _uploadImage;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly INotificationRepository _notificationRepo;
+        private readonly IRealTimeNotifier _realTimeNotifier;
 
         public SupportService(
             ISupportRepository supportRepo,
             IUploadImage uploadImage,
             UserManager<ApplicationUser> userManager,
-            INotificationRepository notificationRepo)
+            INotificationRepository notificationRepo,
+            IRealTimeNotifier realTimeNotifier)
         {
             _supportRepo = supportRepo;
             _uploadImage = uploadImage;
             _userManager = userManager;
             _notificationRepo = notificationRepo;
+            _realTimeNotifier = realTimeNotifier;
         }
 
         public async Task<Response<string>> SubmitTicketAsync(Guid? userId, SubmitSupportTicketDto dto)
@@ -164,6 +168,11 @@ namespace Cocorra.BLL.Services.SupportService
                     await _userManager.SetLockoutEnabledAsync(muteUser, true);
                     await _userManager.SetLockoutEndDateAsync(muteUser, DateTimeOffset.UtcNow.AddHours(24));
 
+                    // Force kick from any active room via SignalR
+                    await _realTimeNotifier.ForceLogoutAsync(
+                        report.ReportedUserId.Value,
+                        "Your account has been temporarily suspended for 24 hours.");
+
                     report.Status = "Resolved";
                     break;
 
@@ -176,6 +185,11 @@ namespace Cocorra.BLL.Services.SupportService
 
                     await _userManager.SetLockoutEnabledAsync(banUser, true);
                     await _userManager.SetLockoutEndDateAsync(banUser, DateTimeOffset.UtcNow.AddYears(100));
+
+                    // Force kick from any active room via SignalR
+                    await _realTimeNotifier.ForceLogoutAsync(
+                        report.ReportedUserId.Value,
+                        "Your account has been permanently banned.");
 
                     report.Status = "Resolved";
                     break;

@@ -129,5 +129,16 @@ namespace Cocorra.API.Controllers
             var result = await _roomService.EndRoomAsync(roomId, hostId);
             return StatusCode((int)result.StatusCode, result);
         }
+
+        [Authorize(Roles = "Admin")]
+        [HttpGet(Router.RoomRouting.AdminHistory)]
+        public async Task<IActionResult> GetRoomHistory([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20)
+        {
+            if (pageSize > 50) pageSize = 50;
+            if (pageNumber < 1) pageNumber = 1;
+
+            var result = await _roomService.GetEndedRoomsHistoryAsync(pageNumber, pageSize);
+            return StatusCode((int)result.StatusCode, result);
+        }
     }
 }

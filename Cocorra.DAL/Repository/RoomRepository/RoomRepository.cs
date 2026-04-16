@@ -37,6 +37,7 @@ namespace Cocorra.DAL.Repository.RoomRepository
             var query = _dbContext.Rooms
                 .AsNoTracking()
                 .Include(r => r.Host)
+                .Include(r => r.Participants)
                 .Where(r => r.Status == RoomStatus.Live || r.Status == RoomStatus.Scheduled);
 
             if (categoryId.HasValue)
@@ -46,6 +47,7 @@ namespace Cocorra.DAL.Repository.RoomRepository
 
             return await query
                 .OrderBy(r => r.Status == RoomStatus.Live ? 0 : 1)
+                .ThenByDescending(r => r.Participants.Count(p => p.Status == ParticipantStatus.Active))
                 .ThenBy(r => r.StartDate)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
@@ -115,6 +117,19 @@ namespace Cocorra.DAL.Repository.RoomRepository
         {
             _dbContext.RoomParticipants.Remove(participant);
             await Task.CompletedTask;
+        }
+
+        public async Task<List<Room>> GetEndedRoomsAsync(int pageNumber = 1, int pageSize = 20)
+        {
+            return await _dbContext.Rooms
+                .AsNoTracking()
+                .Include(r => r.Host)
+                .Include(r => r.Participants)
+                .Where(r => r.Status == RoomStatus.Ended)
+                .OrderByDescending(r => r.UpdatedAt)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
         }
     }
 }

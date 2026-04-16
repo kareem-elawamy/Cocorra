@@ -110,6 +110,7 @@ builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(typeof(Cocorra.BLL.Events.UserRequestedToJoinRoomEvent).Assembly);
 });
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<Cocorra.BLL.Services.RealTimeNotifier.IRealTimeNotifier, Cocorra.API.Services.SignalRNotifier>();
 #endregion
 
 

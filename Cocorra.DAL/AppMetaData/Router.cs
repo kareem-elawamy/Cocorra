@@ -57,6 +57,7 @@ namespace Cocorra.DAL.AppMetaData
             public const string ToggleReminder = Prefix + "/{roomId:guid}/toggle-reminder"; // POST
             public const string Start = Prefix + "/{roomId:guid}/Start";                    // POST
             public const string End = Prefix + "/{roomId:guid}/End";                        // POST
+            public const string AdminHistory = Prefix + "/admin/history";                    // GET
         }
 
         public static class ProfileRouting

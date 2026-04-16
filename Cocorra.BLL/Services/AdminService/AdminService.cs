@@ -1,3 +1,4 @@
+using Cocorra.BLL.Services.Email;
 using Cocorra.BLL.Services.Upload;
 using Cocorra.DAL.DTOS.AdminDto;
 using Cocorra.DAL.Enums;
@@ -18,13 +19,15 @@ namespace Cocorra.BLL.Services.AdminService
     {
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IUploadVoice _uploadVoice;
+        private readonly IEmailService _emailService;
         private readonly string _baseUrl;
 
-        public AdminService(UserManager<ApplicationUser> userManager, IUploadVoice uploadVoice, IConfiguration configuration)
+        public AdminService(UserManager<ApplicationUser> userManager, IUploadVoice uploadVoice, IConfiguration configuration, IEmailService emailService)
         {
             _userManager = userManager;
             _uploadVoice = uploadVoice;
             _baseUrl = configuration["AppSettings:BaseUrl"]?.TrimEnd('/') ?? "";
+            _emailService = emailService;
         }
 
         private string? BuildFullUrl(string? relativePath)
@@ -79,9 +82,60 @@ namespace Cocorra.BLL.Services.AdminService
             var result = await _userManager.UpdateAsync(user);
 
             if (result.Succeeded)
+            {
+                // Send verification status emails (fire-and-forget, do not block the response)
+                try
+                {
+                    await SendVerificationEmailAsync(user, newStatus);
+                }
+                catch { /* Email failures must not block admin actions */ }
+
                 return Success($"User status changed from {oldStatus} to {newStatus}");
+            }
 
             return BadRequest<string>("Failed to change status");
+        }
+
+        private async Task SendVerificationEmailAsync(ApplicationUser user, UserStatus newStatus)
+        {
+            if (string.IsNullOrEmpty(user.Email)) return;
+
+            switch (newStatus)
+            {
+                case UserStatus.Pending:
+                    await _emailService.SendEmailAsync(
+                        user.Email,
+                        "Cocorra — Voice Verification Received",
+                        $"<h2>Hi {user.FirstName},</h2>" +
+                        "<p>Thank you for submitting your voice verification. Your request has been received and is currently under review by our team.</p>" +
+                        "<p>We'll notify you once a decision has been made. This usually takes 24–48 hours.</p>" +
+                        "<br><p>— The Cocorra Team</p>");
+                    break;
+
+                case UserStatus.Active:
+                    await _emailService.SendEmailAsync(
+                        user.Email,
+                        "Cocorra — Welcome! You're Verified ✅",
+                        $"<h2>Welcome, {user.FirstName}!</h2>" +
+                        "<p>Your voice verification has been approved. You now have full access to Cocorra — explore rooms, join conversations, and connect with the community.</p>" +
+                        "<p>We're excited to have you on board!</p>" +
+                        "<br><p>— The Cocorra Team</p>");
+                    break;
+
+                case UserStatus.ReRecord:
+                    await _emailService.SendEmailAsync(
+                        user.Email,
+                        "Cocorra — Action Required: New Voice Sample Needed",
+                        $"<h2>Hi {user.FirstName},</h2>" +
+                        "<p>We reviewed your voice verification but unfortunately couldn't approve it. This could be due to poor audio quality, background noise, or an incomplete recording.</p>" +
+                        "<p><strong>Please open the app and submit a new voice sample</strong> so we can complete your verification.</p>" +
+                        "<br><p>— The Cocorra Team</p>");
+                    break;
+
+                // Rejected: silent rejection — no email sent
+                default:
+                    break;
+            }
         }
 
         public async Task<Response<IEnumerable<UserDto>>> GetAllUsersAsync(string? search, int page = 1, int pageSize = 10)

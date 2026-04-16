@@ -27,5 +27,7 @@ namespace Cocorra.DAL.Repository.RoomRepository
         Task<int> GetRoomRemindersCountAsync(Guid roomId);
         Task AddRoomReminderAsync(RoomReminder reminder);
         Task RemoveRoomReminderAsync(RoomReminder reminder);
+
+        Task<List<Room>> GetEndedRoomsAsync(int pageNumber = 1, int pageSize = 20);
     }
 }

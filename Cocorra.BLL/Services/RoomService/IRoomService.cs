@@ -16,4 +16,5 @@ public interface IRoomService
     Task<Response<string>> StartScheduledRoomAsync(Guid roomId, Guid hostId);
     Task<Response<string>> EndRoomAsync(Guid roomId, Guid hostId);
     Task LeaveRoomCleanupAsync(Guid roomId, Guid userId);
+    Task<Response<IEnumerable<RoomSummaryDto>>> GetEndedRoomsHistoryAsync(int pageNumber = 1, int pageSize = 20);
 }
