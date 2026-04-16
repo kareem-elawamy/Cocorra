@@ -1,3 +1,4 @@
+using Cocorra.BLL.Services.ChatService;
 using Cocorra.BLL.Services.RoomService;
 using Cocorra.DAL.Enums;
 using Cocorra.DAL.Repository.RoomRepository;
@@ -13,14 +14,16 @@ namespace Cocorra.API.Hubs
     {
         private readonly IRoomRepository _roomRepo;
         private readonly IRoomService _roomService;
+        private readonly IChatService _chatService;
 
         // Thread-safe mapping: ConnectionId → (UserId, RoomId)
         private static readonly ConcurrentDictionary<string, (Guid UserId, Guid RoomId)> _connections = new();
 
-        public RoomHub(IRoomRepository roomRepo, IRoomService roomService)
+        public RoomHub(IRoomRepository roomRepo, IRoomService roomService, IChatService chatService)
         {
             _roomRepo = roomRepo;
             _roomService = roomService;
+            _chatService = chatService;
         }
 
         public override async Task OnConnectedAsync()
@@ -425,6 +428,97 @@ namespace Cocorra.API.Hubs
 
             // Purge all stale connection mappings for this room
             PurgeRoomConnections(roomGuid);
+        }
+
+        // ============================================================
+        // Room Chat: Group (Ephemeral) & Private (Persistent)
+        // ============================================================
+
+        /// <summary>
+        /// Sends an ephemeral group message to all participants in the room.
+        /// NOT persisted to the database. Does NOT check UserBlock — all room
+        /// members see group messages regardless of block status.
+        /// </summary>
+        public async Task SendRoomGroupMessage(string roomId, string content)
+        {
+            try
+            {
+                var userId = GetUserId();
+                var roomGuid = ParseGuidSafe(roomId, "Room ID");
+
+                if (string.IsNullOrWhiteSpace(content))
+                {
+                    await Clients.Caller.SendAsync("SendMessageError", new { Error = "Message cannot be empty." });
+                    return;
+                }
+
+                // Verify the sender is an active participant in this room
+                var participant = await _roomRepo.GetParticipantAsync(roomGuid, userId);
+                if (participant == null || participant.Status != ParticipantStatus.Active)
+                {
+                    await Clients.Caller.SendAsync("SendMessageError", new { Error = "You are not an active member of this room." });
+                    return;
+                }
+
+                var senderName = (participant.User?.FirstName + " " + participant.User?.LastName).Trim();
+
+                await Clients.Group(roomId).SendAsync("ReceiveRoomMessage", new
+                {
+                    SenderId = userId,
+                    SenderName = string.IsNullOrEmpty(senderName) ? "Unknown" : senderName,
+                    ProfilePicturePath = participant.User?.ProfilePicturePath ?? "",
+                    Content = content.Trim(),
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+            catch (HubException)
+            {
+                throw; // Re-throw auth/parse errors from GetUserId/ParseGuidSafe
+            }
+            catch (Exception)
+            {
+                await Clients.Caller.SendAsync("SendMessageError", new { Error = "An unexpected error occurred. Please try again." });
+            }
+        }
+
+        /// <summary>
+        /// Sends a persistent private message to a specific user from within a room.
+        /// Saved to the database via ChatService. ENFORCES the UserBlock system — if
+        /// either party has blocked the other, the message is rejected.
+        /// </summary>
+        public async Task SendRoomPrivateMessage(Guid targetUserId, string content)
+        {
+            try
+            {
+                var userId = GetUserId();
+
+                if (string.IsNullOrWhiteSpace(content))
+                {
+                    await Clients.Caller.SendAsync("SendMessageError", new { Error = "Message cannot be empty." });
+                    return;
+                }
+
+                var result = await _chatService.SaveMessageAsync(userId, targetUserId, content);
+
+                if (!result.Succeeded)
+                {
+                    await Clients.Caller.SendAsync("SendMessageError", new { Error = result.Message });
+                    return;
+                }
+
+                var messageDto = result.Data;
+
+                await Clients.User(targetUserId.ToString()).SendAsync("ReceivePrivateMessage", messageDto);
+                await Clients.Caller.SendAsync("PrivateMessageSent", messageDto);
+            }
+            catch (HubException)
+            {
+                throw; // Re-throw auth errors from GetUserId
+            }
+            catch (Exception)
+            {
+                await Clients.Caller.SendAsync("SendMessageError", new { Error = "An unexpected error occurred. Please try again." });
+            }
         }
     }
 }

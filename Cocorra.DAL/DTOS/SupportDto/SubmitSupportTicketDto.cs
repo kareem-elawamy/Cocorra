@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Cocorra.DAL.Enums;
+using Microsoft.AspNetCore.Http;
 
 namespace Cocorra.DAL.DTOS.SupportDto
 {
@@ -11,5 +12,7 @@ namespace Cocorra.DAL.DTOS.SupportDto
         public string Message { get; set; } = string.Empty;
 
         public string? ContactEmail { get; set; }
+
+        public IFormFile? Screenshot { get; set; }
     }
 }

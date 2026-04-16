@@ -18,6 +18,8 @@ namespace Cocorra.DAL.Models
 
         public string? ContactEmail { get; set; }
 
+        public string? ScreenshotPath { get; set; }
+
         [Required]
         [MaxLength(50)]
         public string Status { get; set; } = "Open";

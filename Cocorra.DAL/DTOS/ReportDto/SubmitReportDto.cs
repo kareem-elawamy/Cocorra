@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using Cocorra.DAL.Enums;
+using Microsoft.AspNetCore.Http;
 
 namespace Cocorra.DAL.DTOS.ReportDto
 {
@@ -13,5 +14,7 @@ namespace Cocorra.DAL.DTOS.ReportDto
 
         public Guid? ReportedUserId { get; set; }
         public Guid? ReportedRoomId { get; set; }
+
+        public IFormFile? Screenshot { get; set; }
     }
 }

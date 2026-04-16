@@ -36,6 +36,8 @@ namespace Cocorra.DAL.Repository.SupportRepository
                 .AsNoTracking()
                 .Include(r => r.Reporter)
                 .Include(r => r.ReportedUser)
+                .Include(r => r.ReportedRoom)
+                    .ThenInclude(room => room!.Host)
                 .AsQueryable();
 
             if (category.HasValue)

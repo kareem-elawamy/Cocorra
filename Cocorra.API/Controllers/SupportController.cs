@@ -23,7 +23,7 @@ namespace Cocorra.API.Controllers
 
         [AllowAnonymous]
         [HttpPost(Router.SupportRouting.SubmitTicket)]
-        public async Task<IActionResult> SubmitTicket([FromBody] SubmitSupportTicketDto dto)
+        public async Task<IActionResult> SubmitTicket([FromForm] SubmitSupportTicketDto dto)
         {
             Guid? userId = null;
             var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -39,7 +39,7 @@ namespace Cocorra.API.Controllers
 
         [Authorize]
         [HttpPost(Router.SupportRouting.SubmitReport)]
-        public async Task<IActionResult> SubmitReport([FromBody] SubmitReportDto dto)
+        public async Task<IActionResult> SubmitReport([FromForm] SubmitReportDto dto)
         {
             var userIdString = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (!Guid.TryParse(userIdString, out Guid reporterId)) return Unauthorized();
@@ -63,6 +63,16 @@ namespace Cocorra.API.Controllers
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
             var result = await _supportService.UpdateReportStatusAsync(id, dto.Status);
+            return StatusCode((int)result.StatusCode, result);
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost(Router.SupportRouting.AdminTakeReportAction)]
+        public async Task<IActionResult> TakeReportAction(Guid id, [FromBody] TakeReportActionDto dto)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var result = await _supportService.TakeActionOnReportAsync(id, dto);
             return StatusCode((int)result.StatusCode, result);
         }
     }
