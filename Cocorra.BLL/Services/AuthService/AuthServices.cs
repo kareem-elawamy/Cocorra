@@ -451,6 +451,23 @@ namespace Cocorra.BLL.Services.AuthServices
                 await _context.SaveChangesAsync();
             }
 
+            // Clean up all Restrict-FK rows to allow user deletion
+            await _context.FriendRequests
+                .Where(fr => fr.SenderId == userId || fr.ReceiverId == userId)
+                .ExecuteDeleteAsync();
+
+            await _context.Messages
+                .Where(m => m.SenderId == userId || m.ReceiverId == userId)
+                .ExecuteDeleteAsync();
+
+            await _context.UserBlocks
+                .Where(ub => ub.BlockerId == userId || ub.BlockedId == userId)
+                .ExecuteDeleteAsync();
+
+            await _context.Notifications
+                .Where(n => n.UserId == userId)
+                .ExecuteDeleteAsync();
+
             try
             {
                 var result = await _userManager.DeleteAsync(user);
@@ -465,7 +482,7 @@ namespace Cocorra.BLL.Services.AuthServices
             }
             catch (DbUpdateException)
             {
-                return BadRequest<string>("Cannot delete account due to pending compliance records.");
+                return BadRequest<string>("Cannot delete account due to remaining database references. Please contact support.");
             }
         }
     }
