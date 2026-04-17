@@ -196,8 +196,14 @@ public class RoomService : ResponseHandler, IRoomService
                 IsRead = false
             };
             await _mediator.Publish(new UserRequestedToJoinRoomEvent(room.HostId, userId, roomId));
-
             await _roomRepo.AddNotificationsAsync(new List<Notification> { notification });
+
+            var hostUser = await _userManager.FindByIdAsync(room.HostId.ToString());
+            if (!string.IsNullOrEmpty(hostUser?.FcmToken))
+            {
+                var data = new Dictionary<string, string> { { "type", "room" }, { "roomId", room.Id.ToString() } };
+                try { await _pushService.SendPushNotificationAsync(hostUser.FcmToken, notification.Title, notification.Message, data); } catch { }
+            }
         }
 
         await _roomRepo.AddParticipantAsync(newParticipant);
@@ -234,6 +240,14 @@ public class RoomService : ResponseHandler, IRoomService
             IsRead = false
         };
         await _roomRepo.AddNotificationsAsync(new List<Notification> { notification });
+
+        var approvedUser = await _userManager.FindByIdAsync(targetUserId.ToString());
+        if (!string.IsNullOrEmpty(approvedUser?.FcmToken))
+        {
+            var data = new Dictionary<string, string> { { "type", "room" }, { "roomId", room.Id.ToString() } };
+            try { await _pushService.SendPushNotificationAsync(approvedUser.FcmToken, notification.Title, notification.Message, data); } catch { }
+        }
+
         await _roomRepo.SaveChangesAsync();
         await _mediator.Publish(new UserApprovedToJoinRoomEvent(targetUserId, roomId));
         return Success(true, "User approved successfully.");
