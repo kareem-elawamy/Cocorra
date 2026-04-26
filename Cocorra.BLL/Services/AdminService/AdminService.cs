@@ -1,4 +1,5 @@
 using Cocorra.BLL.Services.Email;
+using Cocorra.BLL.Services.NotificationService;
 using Cocorra.BLL.Services.Upload;
 using Cocorra.DAL.DTOS.AdminDto;
 using Cocorra.DAL.Enums;
@@ -21,14 +22,16 @@ namespace Cocorra.BLL.Services.AdminService
         private readonly IEmailService _emailService;
         private readonly string _baseUrl;
         private readonly IUserRepository _userRepository;
+        private readonly IPushNotificationService _pushService;
 
-        public AdminService(UserManager<ApplicationUser> userManager, IUploadVoice uploadVoice, IConfiguration configuration, IEmailService emailService, IUserRepository userRepository)
+        public AdminService(UserManager<ApplicationUser> userManager, IUploadVoice uploadVoice, IConfiguration configuration, IEmailService emailService, IUserRepository userRepository, IPushNotificationService pushService)
         {
             _userManager = userManager;
             _uploadVoice = uploadVoice;
             _baseUrl = configuration["AppSettings:BaseUrl"]?.TrimEnd('/') ?? "";
             _emailService = emailService;
             _userRepository = userRepository;
+            _pushService = pushService;
         }
 
         private string? BuildFullUrl(string? relativePath)
@@ -89,6 +92,12 @@ namespace Cocorra.BLL.Services.AdminService
                     await SendVerificationEmailAsync(user, newStatus);
                 }
                 catch { }
+
+                if (newStatus == UserStatus.ReRecord && !string.IsNullOrEmpty(user.FcmToken))
+                {
+                    var data = new Dictionary<string, string> { { "type", "reRecord" } };
+                    try { await _pushService.SendPushNotificationAsync(user.FcmToken, "إعادة تسجيل صوتي 🎙️", "نعتذر منك، نحتاج منك إعادة تسجيل المقطع الصوتي الخاص بك بوضوح أكبر.", data); } catch { }
+                }
 
                 return Success($"User status changed from {oldStatus} to {newStatus}");
             }

@@ -65,5 +65,79 @@ namespace Cocorra.DAL.Repository.SupportRepository
             _dbContext.Reports.Update(report);
             await _dbContext.SaveChangesAsync();
         }
+
+        // Chat Support Methods
+        public async Task<SupportChat?> GetUserOpenChatAsync(string userId)
+        {
+            return await _dbContext.SupportChats
+                .Include(c => c.Messages)
+                .Where(c => c.UserId == userId && (c.Status == SupportChatStatus.Pending || c.Status == SupportChatStatus.Active))
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task<SupportChat?> GetChatByIdAsync(Guid chatId)
+        {
+            return await _dbContext.SupportChats
+                .Include(c => c.Messages)
+                .FirstOrDefaultAsync(c => c.Id == chatId);
+        }
+
+        public async Task<int> GetPendingUserMessageCountAsync(Guid chatId)
+        {
+            return await _dbContext.SupportMessages
+                .CountAsync(m => m.SupportChatId == chatId && !m.IsFromAdmin);
+        }
+
+        public async Task AddChatAsync(SupportChat chat)
+        {
+            await _dbContext.SupportChats.AddAsync(chat);
+            await _dbContext.SaveChangesAsync();
+        }
+
+        public async Task AddMessageAsync(SupportMessage message)
+        {
+            await _dbContext.SupportMessages.AddAsync(message);
+            await _dbContext.SaveChangesAsync();
+        }
+
+        public async Task UpdateChatAsync(SupportChat chat)
+        {
+            try
+            {
+                _dbContext.SupportChats.Update(chat);
+                await _dbContext.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw; // Let the service layer handle it
+            }
+        }
+
+        public async Task<List<SupportChat>> GetPendingChatsAsync()
+        {
+            return await _dbContext.SupportChats
+                .Include(c => c.Messages)
+                .Where(c => c.Status == SupportChatStatus.Pending)
+                .OrderByDescending(c => c.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<List<SupportChat>> GetAdminActiveChatsAsync(string adminId)
+        {
+            return await _dbContext.SupportChats
+                .Include(c => c.Messages)
+                .Where(c => c.AdminId == adminId && c.Status == SupportChatStatus.Active)
+                .OrderByDescending(c => c.CreatedAt)
+                .ToListAsync();
+        }
+
+        public async Task<List<SupportChat>> GetUserChatHistoryAsync(string userId)
+        {
+            return await _dbContext.SupportChats
+                .Include(c => c.Messages)
+                .Where(c => c.UserId == userId && c.Status == SupportChatStatus.Closed)
+                .OrderByDescending(c => c.ClosedAt)
+                .ToListAsync();
+        }
     }
 }

@@ -91,7 +91,13 @@ builder.Services.AddCors(options =>
 });
 
 #region AddScopedServices
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.MaximumReceiveMessageSize = 32 * 1024; // 32KB max per message
+    options.StreamBufferCapacity = 10;
+});
 builder.Services.AddScoped<IUploadVoice, UploadVoice>();
 builder.Services.AddScoped<IRoomRepository, RoomRepository>();
 builder.Services.AddScoped<IRoomService, RoomService>();
@@ -292,6 +298,7 @@ app.UseSwaggerUI(c =>
 
 app.MapHub<RoomHub>("/hubs/rooms");
 app.MapHub<ChatHub>("/hubs/chat");
+app.MapHub<Cocorra.API.Hubs.SupportHub>("/hubs/support");
 app.MapControllers();
 app.MapGet("/", () => "Welcome to Cocorra API - System is Running Successfully! ");
 

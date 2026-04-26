@@ -13,5 +13,16 @@ namespace Cocorra.DAL.Repository.SupportRepository
         Task<List<Report>> GetFilteredReportsAsync(ReportCategory? category, string? status);
         Task<Report?> GetReportByIdAsync(Guid reportId);
         Task UpdateReportAsync(Report report);
+
+        // Chat Support
+        Task<SupportChat?> GetUserOpenChatAsync(string userId);
+        Task<SupportChat?> GetChatByIdAsync(Guid chatId);
+        Task<int> GetPendingUserMessageCountAsync(Guid chatId);
+        Task AddChatAsync(SupportChat chat);
+        Task AddMessageAsync(SupportMessage message);
+        Task UpdateChatAsync(SupportChat chat);
+        Task<List<SupportChat>> GetPendingChatsAsync();
+        Task<List<SupportChat>> GetAdminActiveChatsAsync(string adminId);
+        Task<List<SupportChat>> GetUserChatHistoryAsync(string userId);
     }
 }

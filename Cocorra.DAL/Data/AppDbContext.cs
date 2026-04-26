@@ -22,6 +22,8 @@ namespace Cocorra.DAL.Data
         public DbSet<SupportTicket> SupportTickets { get; set; }
         public DbSet<Report> Reports { get; set; }
         public DbSet<UserBlock> UserBlocks { get; set; }
+        public DbSet<SupportChat> SupportChats { get; set; }
+        public DbSet<SupportMessage> SupportMessages { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -175,6 +177,30 @@ namespace Cocorra.DAL.Data
                 .WithMany()
                 .HasForeignKey(ub => ub.BlockedId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // ============================================================
+            // 7. Support Chat Indexes
+            // ============================================================
+
+            // Covers: GetUserOpenChatAsync, GetUserChatHistoryAsync
+            builder.Entity<SupportChat>()
+                .HasIndex(c => new { c.UserId, c.Status })
+                .HasDatabaseName("IX_SupportChats_UserId_Status");
+
+            // Covers: GetPendingChatsAsync (+ sorts by CreatedAt)
+            builder.Entity<SupportChat>()
+                .HasIndex(c => new { c.Status, c.CreatedAt })
+                .HasDatabaseName("IX_SupportChats_Status_CreatedAt");
+
+            // Covers: GetAdminActiveChatsAsync
+            builder.Entity<SupportChat>()
+                .HasIndex(c => new { c.AdminId, c.Status })
+                .HasDatabaseName("IX_SupportChats_AdminId_Status");
+
+            // Covers: GetPendingUserMessageCountAsync
+            builder.Entity<SupportMessage>()
+                .HasIndex(m => new { m.SupportChatId, m.IsFromAdmin })
+                .HasDatabaseName("IX_SupportMessages_ChatId_IsFromAdmin");
         }   
 
     }
