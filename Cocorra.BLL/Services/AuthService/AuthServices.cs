@@ -143,13 +143,27 @@ namespace Cocorra.BLL.Services.AuthServices
             switch (user.Status)
             {
                 case UserStatus.Pending:
-                    return BadRequest<object>(new { userStatus = user.Status.ToString() }, "Your account is still pending approval. We usually respond within 24 hours.");
+                case UserStatus.ReRecord:
+                    // SECURITY: Issue a RESTRICTED JWT for verification-stage users.
+                    // The JWT contains VerificationStatus=Pending/ReRecord, which is enforced
+                    // by the "VerificationOnly" policy. All other endpoints use the default
+                    // "FullAccess" policy (requires VerificationStatus=Active) and will reject this token.
+                    var restrictedToken = await GenerateJwtToken(user);
+                    var restrictedRoles = await _userManager.GetRolesAsync(user);
+                    var restrictedAuth = new AuthModel
+                    {
+                        Email = user.Email,
+                        Username = user.UserName,
+                        Token = new JwtSecurityTokenHandler().WriteToken(restrictedToken),
+                        ExpiresOn = restrictedToken.ValidTo,
+                        IsAuthenticated = true,
+                        Roles = restrictedRoles.ToList()
+                    };
+                    return Success<object>(restrictedAuth, meta: new { userStatus = user.Status.ToString() });
                 case UserStatus.Rejected:
                     return BadRequest<object>(new { userStatus = user.Status.ToString() }, "Your account has been rejected.");
                 case UserStatus.Banned:
                     return BadRequest<object>(new { userStatus = user.Status.ToString() }, "Your account has been banned.");
-                case UserStatus.ReRecord:
-                    return BadRequest<object>(new { userStatus = user.Status.ToString() }, "Your voice verification was not accepted. Please re-record and resubmit.");
                 case UserStatus.Active:
                     break;
                 default:
@@ -215,7 +229,12 @@ namespace Cocorra.BLL.Services.AuthServices
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Name, user.UserName!),
                 // profile Picture URL claim
-                new Claim("profilePicture", string.IsNullOrEmpty(user.ProfilePicturePath) ? "" : $"{_configuration["AppSettings:BaseUrl"]}/{user.ProfilePicturePath.Replace("\\", "/")}")         };
+                new Claim("profilePicture", string.IsNullOrEmpty(user.ProfilePicturePath) ? "" : $"{_configuration["AppSettings:BaseUrl"]}/{user.ProfilePicturePath.Replace("\\", "/")}"),
+                // SECURITY: Embed verification status for policy-based authorization.
+                // This claim determines whether the user can access full app features (Active)
+                // or only verification endpoints (Pending/ReRecord).
+                new Claim("VerificationStatus", user.Status.ToString())
+            };
 
             foreach (var role in userRoles) claims.Add(new Claim(ClaimTypes.Role, role));
 

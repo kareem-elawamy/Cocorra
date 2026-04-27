@@ -99,12 +99,16 @@ namespace Cocorra.API.Controllers
             return StatusCode((int)result.StatusCode, result);
         }
 
-        [AllowAnonymous]
+        [Authorize(Policy = "VerificationOnly")]
         [HttpPost(Router.AuthenticationRouting.ReRecordVoice)]
-        public async Task<IActionResult> ReRecordVoice([FromForm] string email, IFormFile voiceFile)
+        public async Task<IActionResult> ReRecordVoice(IFormFile voiceFile)
         {
-            if (string.IsNullOrWhiteSpace(email))
-                return BadRequest("Email is required.");
+            // SECURITY: Extract email from JWT claims, NOT from client request body.
+            // This eliminates the attack vector where an anonymous user could overwrite
+            // another user's voice file by passing their email.
+            var email = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Email)?.Value
+                     ?? User.FindFirst(ClaimTypes.Email)?.Value;
+            if (string.IsNullOrEmpty(email)) return Unauthorized();
 
             if (voiceFile == null || voiceFile.Length == 0)
                 return BadRequest("No voice file uploaded.");

@@ -23,6 +23,7 @@ using Cocorra.DAL.Repository.NotificationRepository;
 using Cocorra.DAL.Repository.RoomRepository;
 using Cocorra.DAL.Repository.SupportRepository;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -131,10 +132,6 @@ builder.Services.AddScoped<Cocorra.BLL.Services.RealTimeNotifier.IRealTimeNotifi
 
 
 
-
-
-
-
 #region AddDbContext
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
@@ -197,13 +194,35 @@ builder.Services.AddAuthentication(options =>
             var path = context.HttpContext.Request.Path;
 
             if (!string.IsNullOrEmpty(accessToken) &&
-                (path.StartsWithSegments("/hubs/chat") || path.StartsWithSegments("/hubs/rooms")))
+                (path.StartsWithSegments("/hubs/chat") || path.StartsWithSegments("/hubs/rooms") || path.StartsWithSegments("/hubs/support")))
             {
                 context.Token = accessToken;
             }
             return Task.CompletedTask;
         }
     };
+});
+
+// SECURITY: Custom Authorization Policies for Voice Verification flow.
+// Forcing VerificationStatus=Active as the default policy is the strictly better security posture.
+// Any existing Active users with old tokens (missing the claim) will need to re-login once.
+// This is acceptable because JWT expiry is 1 day, so the migration window is at most 24 hours.
+builder.Services.AddAuthorization(options =>
+{
+    // Default policy: Requires VerificationStatus=Active.
+    // Every bare [Authorize] attribute will enforce this automatically.
+    options.DefaultPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .RequireClaim("VerificationStatus", "Active")
+        .Build();
+
+    // Named policy for verification-stage endpoints (ReRecord, etc.).
+    // Allows Pending, ReRecord, AND Active users — so admins/active users can also reach it if needed.
+    options.AddPolicy("VerificationOnly", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireClaim("VerificationStatus", "Pending", "ReRecord", "Active");
+    });
 });
 #endregion
 
