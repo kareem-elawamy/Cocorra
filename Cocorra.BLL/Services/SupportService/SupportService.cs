@@ -264,6 +264,7 @@ namespace Cocorra.BLL.Services.SupportService
             var messageDto = new SupportMessageDto
             {
                 Id = message.Id,
+                ChatId = chat.Id,
                 SenderId = message.SenderId,
                 Content = message.Content,
                 IsFromAdmin = message.IsFromAdmin,
@@ -272,6 +273,7 @@ namespace Cocorra.BLL.Services.SupportService
 
             var resultDto = new SendMessageResultDto
             {
+                ChatId = chat.Id,
                 Message = messageDto,
                 IsNewChat = isNew
             };
@@ -328,6 +330,7 @@ namespace Cocorra.BLL.Services.SupportService
             var messageDto = new SupportMessageDto
             {
                 Id = message.Id,
+                ChatId = chat.Id,
                 SenderId = message.SenderId,
                 Content = message.Content,
                 IsFromAdmin = message.IsFromAdmin,
@@ -426,6 +429,7 @@ namespace Cocorra.BLL.Services.SupportService
                 Messages = chat.Messages.Select(m => new SupportMessageDto
                 {
                     Id = m.Id,
+                    ChatId = chat.Id,
                     SenderId = m.SenderId,
                     Content = m.Content,
                     IsFromAdmin = m.IsFromAdmin,
