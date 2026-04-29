@@ -595,10 +595,13 @@ namespace Cocorra.BLL.Services.AuthServices
             var user = await _userManager.FindByIdAsync(userId.ToString());
             if (user == null) return BadRequest<string>("Invalid user");
 
+            if (string.IsNullOrEmpty(user.RefreshToken))
+                return Success<string>("Token already revoked.");
+
             user.RefreshToken = null;
             await _userManager.UpdateAsync(user);
 
-            return Success<string>("Token revoked successfully");
+            return Success<string>("Token revoked successfully.");
         }
     }
 }

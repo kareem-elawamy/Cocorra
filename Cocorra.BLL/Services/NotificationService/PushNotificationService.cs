@@ -15,13 +15,21 @@ namespace Cocorra.BLL.Services.NotificationService
             var message = new Message()
             {
                 Token = fcmToken,
-                Notification = new Notification()
+                Data = data
+            };
+
+            // CRITICAL: Only attach Notification when title/body are non-empty.
+            // Firebase treats ANY Notification object (even with empty strings) as a
+            // "display" notification, which can cause blank pop-ups on Android 13+
+            // and prevents silent background handling on iOS.
+            if (!string.IsNullOrWhiteSpace(title) || !string.IsNullOrWhiteSpace(body))
+            {
+                message.Notification = new Notification()
                 {
                     Title = title,
                     Body = body
-                },
-                Data = data
-            };
+                };
+            }
 
             try
             {
