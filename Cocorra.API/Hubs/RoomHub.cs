@@ -103,6 +103,33 @@ namespace Cocorra.API.Hubs
                 _connections.TryRemove(connId, out _);
         }
 
+        /// <summary>
+        /// Returns all active SignalR connection IDs for a given user.
+        /// Used by AdminController to force-disconnect banned users from active rooms.
+        /// </summary>
+        public static IReadOnlyList<string> GetConnectionsForUser(Guid userId)
+        {
+            return _connections
+                .Where(kvp => kvp.Value.UserId == userId)
+                .Select(kvp => kvp.Key)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Removes a user's entries from the connection tracking dictionary.
+        /// Called after force-aborting their connections on ban.
+        /// </summary>
+        public static void PurgeUserConnections(Guid userId)
+        {
+            var connectionIds = _connections
+                .Where(kvp => kvp.Value.UserId == userId)
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            foreach (var connId in connectionIds)
+                _connections.TryRemove(connId, out _);
+        }
+
         public async Task JoinRoom(string roomId)
         {
             var userId = GetUserId();

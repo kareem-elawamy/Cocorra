@@ -139,7 +139,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     b =>
     {
         b.MigrationsAssembly("Cocorra.DAL");
-        b.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
+        b.EnableRetryOnFailure(3, TimeSpan.FromSeconds(3), null);
     });
 });
 #endregion

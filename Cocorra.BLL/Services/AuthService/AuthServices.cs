@@ -116,8 +116,7 @@ namespace Cocorra.BLL.Services.AuthServices
                     var fullImagePath = $"{baseUrl}/System/388f7e03b835e6ca1f7c156816047a360bf18efe.png"; 
                     var emailBody = GetOtpHtmlTemplate(user.FirstName!, email: user.Email!, otpCode, fullImagePath);
                     await _emailService.SendEmailAsync(user.Email!, "Registration Received", emailBody);
-                    var restrictedToken = await GenerateJwtToken(user);
-                    var restrictedRoles = await _userManager.GetRolesAsync(user);
+                    var (restrictedToken, restrictedRoles) = await GenerateJwtToken(user);
                     var restrictedRefreshToken = GenerateRefreshToken();
                     user.RefreshToken = restrictedRefreshToken;
                     user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
@@ -172,8 +171,7 @@ namespace Cocorra.BLL.Services.AuthServices
                     // The JWT contains VerificationStatus=Pending/ReRecord, which is enforced
                     // by the "VerificationOnly" policy. All other endpoints use the default
                     // "FullAccess" policy (requires VerificationStatus=Active) and will reject this token.
-                    var restrictedToken = await GenerateJwtToken(user);
-                    var restrictedRoles = await _userManager.GetRolesAsync(user);
+                    var (restrictedToken, restrictedRoles) = await GenerateJwtToken(user);
                     var restrictedRefreshToken = GenerateRefreshToken();
                     user.RefreshToken = restrictedRefreshToken;
                     user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
@@ -200,8 +198,7 @@ namespace Cocorra.BLL.Services.AuthServices
                     return BadRequest<object>("Invalid user status.");
             }
 
-            var jwtToken = await GenerateJwtToken(user);
-            var roles = await _userManager.GetRolesAsync(user);
+            var (jwtToken, roles) = await GenerateJwtToken(user);
             var refreshToken = GenerateRefreshToken();
             user.RefreshToken = refreshToken;
             user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
@@ -254,7 +251,7 @@ namespace Cocorra.BLL.Services.AuthServices
         }
 
 
-        private async Task<JwtSecurityToken> GenerateJwtToken(ApplicationUser user)
+        private async Task<(JwtSecurityToken Token, IList<string> Roles)> GenerateJwtToken(ApplicationUser user)
         {
             var userRoles = await _userManager.GetRolesAsync(user);
             var claims = new List<Claim>
@@ -285,7 +282,7 @@ namespace Cocorra.BLL.Services.AuthServices
                 signingCredentials: new SigningCredentials(authKey, SecurityAlgorithms.HmacSha256)
             );
 
-            return token;
+            return (token, userRoles);
         }
         public async Task<Response<string>> UpdateFcmTokenAsync(Guid userId, string fcmToken)
         {
@@ -568,14 +565,12 @@ namespace Cocorra.BLL.Services.AuthServices
                 return Forbidden<AuthModel>("Account is locked or banned.", new { lockoutEnd = user.LockoutEnd });
             }
 
-            var newAccessToken = await GenerateJwtToken(user);
+            var (newAccessToken, roles) = await GenerateJwtToken(user);
             var newRefreshToken = GenerateRefreshToken();
 
             user.RefreshToken = newRefreshToken;
             user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
             await _userManager.UpdateAsync(user);
-
-            var roles = await _userManager.GetRolesAsync(user);
 
             return Success(new AuthModel
             {
