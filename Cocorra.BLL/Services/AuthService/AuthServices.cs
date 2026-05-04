@@ -151,18 +151,30 @@ namespace Cocorra.BLL.Services.AuthServices
         public async Task<Response<object>> LoginAsync(LoginDto dto)
         {
             var user = await _userManager.FindByEmailAsync(dto.Email!);
-            if (user == null || !await _userManager.CheckPasswordAsync(user, dto.Password!))
+            if (user == null)
             {
                 return BadRequest<object>("Invalid Email or Password");
             }
-            if (!user.EmailConfirmed)
-            {
-                return BadRequest<object>("Please confirm your email before logging in.");
-            }
-            
+
+            // SECURITY: Check lockout BEFORE password verification.
+            // Prevents locked-out users from exercising the password hash path,
+            // and stops AccessFailedCount from incrementing during an active lockout.
             if (await _userManager.IsLockedOutAsync(user))
             {
                 return Forbidden<object>("Account is locked or banned.", new { lockoutEnd = user.LockoutEnd });
+            }
+
+            if (!await _userManager.CheckPasswordAsync(user, dto.Password!))
+            {
+                return BadRequest<object>("Invalid Email or Password");
+            }
+
+            // Clear any accumulated failed access attempts on successful login.
+            await _userManager.ResetAccessFailedCountAsync(user);
+
+            if (!user.EmailConfirmed)
+            {
+                return BadRequest<object>("Please confirm your email before logging in.");
             }
             switch (user.Status)
             {

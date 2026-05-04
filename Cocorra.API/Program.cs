@@ -157,6 +157,14 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(op =>
     op.Password.RequireNonAlphanumeric = true;
     op.Password.RequireDigit = true;
     op.Password.RequiredLength = 8;
+
+    // LOCKOUT: Disable auto-lockout for new users. Bans are managed exclusively
+    // through AdminService.ChangeUserStatusAsync, which explicitly enables lockout
+    // per-user when banning. This prevents Identity from ghost-locking users
+    // after failed password attempts.
+    op.Lockout.AllowedForNewUsers = false;
+    op.Lockout.MaxFailedAccessAttempts = 5;
+    op.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();

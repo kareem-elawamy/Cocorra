@@ -67,7 +67,7 @@ namespace Cocorra.API.Controllers
             var result = await _authServices.ForgotPasswordAsync(dto);
             return Ok(result);
         }
-        [Authorize]
+        [Authorize(Policy = "VerificationOnly")]
         [HttpPut(Router.AuthenticationRouting.UpdateFcmToken)]
         public async Task<IActionResult> UpdateFcmToken([FromBody] string fcmToken)
         {

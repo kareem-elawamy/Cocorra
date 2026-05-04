@@ -57,7 +57,10 @@ namespace Cocorra.BLL.Services.AdminService
             switch (newStatus)
             {
                 case UserStatus.Active:
+                    // Fully clear all lockout state to prevent ghost-bans.
+                    await _userManager.SetLockoutEnabledAsync(user, false);
                     await _userManager.SetLockoutEndDateAsync(user, null);
+                    await _userManager.ResetAccessFailedCountAsync(user);
                     _uploadVoice.DeleteVoice(user.VoiceVerificationPath);
                     user.VoiceVerificationPath = null;
                     break;
@@ -86,6 +89,18 @@ namespace Cocorra.BLL.Services.AdminService
                 case UserStatus.Rejected:
                     _uploadVoice.DeleteVoice(user.VoiceVerificationPath);
                     user.VoiceVerificationPath = null;
+
+                    // Invalidate refresh token so rejected user can't silently refresh.
+                    user.RefreshToken = null;
+
+                    if (!string.IsNullOrEmpty(user.FcmToken))
+                    {
+                        var rejectData = new Dictionary<string, string>
+                        {
+                            { "type", "account_rejected" }
+                        };
+                        try { await _pushService.SendPushNotificationAsync(user.FcmToken, "", "", rejectData); } catch { }
+                    }
                     break;
 
                 case UserStatus.ReRecord:
